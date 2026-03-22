@@ -269,10 +269,13 @@ async def run_clone_job(
         ):
             if result["status"] == "success":
                 processed += 1
+                # Refresh job from database to avoid detached instance
+                db.refresh(job)
                 job.processed_messages = processed
                 db.commit()
         
-        # Update final status
+        # Refresh and update final status
+        db.refresh(job)
         job.status = "completed"
         job.updated_at = datetime.utcnow()
         db.commit()
@@ -287,6 +290,8 @@ async def run_clone_job(
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}")
         try:
+            # Create new session for error handling
+            db.rollback()
             job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
             if job:
                 job.status = "failed"

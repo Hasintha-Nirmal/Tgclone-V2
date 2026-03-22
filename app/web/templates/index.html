@@ -89,9 +89,9 @@
         </div>
 
         <div class="tabs">
-            <button class="tab active" onclick="showTab('channels')">Channels</button>
-            <button class="tab" onclick="showTab('jobs')">Clone Jobs</button>
-            <button class="tab" onclick="showTab('create')">Create Job</button>
+            <button class="tab active" onclick="showTab('channels', this)">Channels</button>
+            <button class="tab" onclick="showTab('jobs', this)">Clone Jobs</button>
+            <button class="tab" onclick="showTab('create', this)">Create Job</button>
         </div>
 
         <div class="content" id="channels-tab">
@@ -314,11 +314,23 @@
             }
         }
 
-        function showTab(tab) {
+        function showTab(tab, clickedElement) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.content').forEach(c => c.style.display = 'none');
             
-            event.target.classList.add('active');
+            // If called from a click event, highlight the clicked tab
+            if (clickedElement) {
+                clickedElement.classList.add('active');
+            } else {
+                // If called programmatically, find and highlight the correct tab
+                const tabs = document.querySelectorAll('.tab');
+                tabs.forEach(t => {
+                    if (t.textContent.toLowerCase().includes(tab)) {
+                        t.classList.add('active');
+                    }
+                });
+            }
+            
             document.getElementById(tab + '-tab').style.display = 'block';
             
             if (tab === 'channels') loadChannels();

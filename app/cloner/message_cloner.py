@@ -89,11 +89,11 @@ class MessageCloner:
             # Download media
             file_path = await self._download_media(message, job_id)
             
-            if file_path:
-                # Upload to target
+            if file_path and file_path.exists():
+                # Upload to target - use absolute path
                 await self.client.send_file(
                     target_entity,
-                    file_path,
+                    str(file_path.absolute()),
                     caption=message.text or "",
                     formatting_entities=message.entities
                 )
@@ -101,13 +101,15 @@ class MessageCloner:
                 # Auto-delete if enabled
                 if settings.auto_delete_files:
                     storage_manager.cleanup_file(file_path)
+            else:
+                logger.error(f"File not found or download failed: {file_path}")
             
         except Exception as e:
             logger.error(f"Error cloning message with media: {e}")
             raise
         finally:
             # Ensure cleanup
-            if file_path and settings.auto_delete_files:
+            if file_path and settings.auto_delete_files and file_path.exists():
                 storage_manager.cleanup_file(file_path)
     
     async def _download_media(
