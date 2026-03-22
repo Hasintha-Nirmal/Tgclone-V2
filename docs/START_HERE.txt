@@ -1,0 +1,37 @@
+================================================================================
+                    TELEGRAM AUTOMATION SYSTEM
+                         START HERE!
+================================================================================
+
+Your Docker container is running but needs authorization.
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                                                                          │
+│  YOUR NEXT COMMAND (copy and paste):                                    │
+│                                                                          │
+│  python manage.py authorize --docker                                    │
+│                                                                          │
+│  OR on Windows:                                                         │
+│  docker-authorize.bat                                                   │
+│                                                                          │
+│  OR on Linux/Mac:                                                       │
+│  ./docker-authorize.sh                                                  │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+WHAT WILL HAPPEN:
+1. Script connects to Telegram
+2. You receive a code in your Telegram app
+3. You enter the code
+4. Done! System is ready
+
+AFTER AUTHORIZATION:
+→ Open: http://localhost:8000
+→ Click "Channels" → "Refresh"
+→ Start cloning!
+
+NEED HELP?
+→ Read: docs/NEXT_STEPS.md (detailed guide)
+→ Read: docs/INDEX.md (all documentation)
+
+================================================================================
