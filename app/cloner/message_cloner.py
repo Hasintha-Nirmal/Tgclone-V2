@@ -6,10 +6,12 @@ from app.utils.logger import logger
 from app.utils.storage import storage_manager
 from config.settings import settings
 import asyncio
+from datetime import datetime, timedelta
 
 class MessageCloner:
     def __init__(self, client: TelegramClient):
         self.client = client
+        self.message_timestamps = []  # Track message times for rate limiting
     
     async def clone_messages(
         self,
@@ -35,12 +37,18 @@ class MessageCloner:
                 reverse=True
             ):
                 try:
+                    # Check hourly rate limit
+                    await self._check_rate_limit()
+                    
                     result = await self._clone_single_message(
                         message, 
                         target_entity, 
                         job_id
                     )
                     message_count += 1
+                    
+                    # Track this message for rate limiting
+                    self.message_timestamps.append(datetime.utcnow())
                     
                     yield {
                         "status": "success",
@@ -57,8 +65,16 @@ class MessageCloner:
                         "error": str(e)
                     }
                 
-                # Small delay to avoid flood
-                await asyncio.sleep(0.5)
+                # Smart delay to avoid flood and protect account
+                if message.media:
+                    await asyncio.sleep(settings.delay_between_media)
+                else:
+                    await asyncio.sleep(settings.delay_between_messages)
+                
+                # Extra break every N messages to avoid detection
+                if message_count % settings.break_every_n_messages == 0:
+                    logger.info(f"Processed {message_count} messages, taking a {settings.break_duration}s break...")
+                    await asyncio.sleep(settings.break_duration)
             
             logger.info(f"Cloned {message_count} messages")
             
@@ -164,3 +180,24 @@ class MessageCloner:
         except Exception as e:
             logger.error(f"Failed to get latest message ID: {e}")
         return None
+    
+    async def _check_rate_limit(self):
+        """Check if we're within safe rate limits"""
+        now = datetime.utcnow()
+        one_hour_ago = now - timedelta(hours=1)
+        
+        # Remove timestamps older than 1 hour
+        self.message_timestamps = [
+            ts for ts in self.message_timestamps 
+            if ts > one_hour_ago
+        ]
+        
+        # Check if we've hit the hourly limit
+        if len(self.message_timestamps) >= settings.max_messages_per_hour:
+            wait_time = 3600  # Wait 1 hour
+            logger.warning(
+                f"Hourly rate limit reached ({settings.max_messages_per_hour} messages/hour). "
+                f"Waiting {wait_time} seconds to protect account..."
+            )
+            await asyncio.sleep(wait_time)
+            self.message_timestamps.clear()

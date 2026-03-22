@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     max_retries: int = 3
     flood_wait_multiplier: float = 1.5
     
+    # Rate Limiting (protect from ban)
+    delay_between_messages: float = 1.0  # seconds between text messages
+    delay_between_media: float = 2.0     # seconds between media messages
+    break_every_n_messages: int = 10     # take a break every N messages
+    break_duration: float = 5.0          # break duration in seconds
+    max_messages_per_hour: int = 200     # maximum messages per hour (safety limit)
+    
     # Logging
     log_level: str = "INFO"
     log_file: str = "./logs/app.log"

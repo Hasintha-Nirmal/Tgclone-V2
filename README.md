@@ -89,6 +89,7 @@ Quick links:
 - **[NEXT_STEPS.md](docs/NEXT_STEPS.md)** - What to do right now ⭐
 - [SETUP.md](docs/SETUP.md) - Detailed setup instructions
 - [AUTHORIZATION.md](docs/AUTHORIZATION.md) - Authorization troubleshooting
+- [RATE_LIMITING.md](docs/RATE_LIMITING.md) - Account protection & rate limits 🛡️
 - [FEATURES.md](docs/FEATURES.md) - Complete feature list
 - [VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md) - Architecture diagrams
 - [QUICKSTART.md](docs/QUICKSTART.md) - Quick start guide
