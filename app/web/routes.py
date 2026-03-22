@@ -240,11 +240,17 @@ async def run_clone_job(
     auto_sync: bool
 ):
     """Run clone job in background"""
-    db = Session(bind=get_db().__next__().bind)
+    from app.utils.database import SessionLocal
+    
+    db = SessionLocal()
     
     try:
         # Update status
         job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
+        if not job:
+            logger.error(f"Job {job_id} not found")
+            return
+            
         job.status = "running"
         db.commit()
         
@@ -280,10 +286,13 @@ async def run_clone_job(
         
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}")
-        job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-        if job:
-            job.status = "failed"
-            job.error_message = str(e)
-            db.commit()
+        try:
+            job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
+            if job:
+                job.status = "failed"
+                job.error_message = str(e)
+                db.commit()
+        except Exception as db_error:
+            logger.error(f"Failed to update job status: {db_error}")
     finally:
         db.close()
