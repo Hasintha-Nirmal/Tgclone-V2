@@ -92,12 +92,16 @@
             <button class="tab active" onclick="showTab('channels', this)">Channels</button>
             <button class="tab" onclick="showTab('jobs', this)">Clone Jobs</button>
             <button class="tab" onclick="showTab('create', this)">Create Job</button>
+            <button class="tab" onclick="showTab('accounts', this)">Accounts</button>
         </div>
 
         <div class="content" id="channels-tab">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h2>My Channels</h2>
                 <button class="btn" onclick="refreshChannels()">🔄 Refresh</button>
+            </div>
+            <div style="background: #e7f3ff; border-left: 4px solid #0088cc; padding: 12px; margin-bottom: 15px; border-radius: 5px; font-size: 14px;">
+                💡 <strong>Tip:</strong> Make sure you have an account logged in (check Accounts tab) before refreshing channels.
             </div>
             <input type="text" class="search-box" id="channel-search" placeholder="Search channels..." onkeyup="filterChannels()">
             <div id="channels-list" class="loading">Loading channels...</div>
@@ -157,11 +161,79 @@
                 <button type="submit" class="btn">Create Job</button>
             </form>
         </div>
+
+        <div class="content" id="accounts-tab" style="display: none;">
+            <h2>Telegram Accounts</h2>
+            
+            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+                <strong>⚠️ Note:</strong> Logging out an account will also clear the channel list, since channels are fetched using the logged-in account.
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3>Logged In Accounts</h3>
+                <button class="btn" onclick="showLoginForm()">➕ Add Account</button>
+            </div>
+            
+            <div id="accounts-list" class="loading">Loading accounts...</div>
+            
+            <!-- Login Form (hidden by default) -->
+            <div id="login-form" style="display: none; margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                <h3>Add Telegram Account</h3>
+                
+                <div id="login-step-1">
+                    <div class="form-group">
+                        <label>Phone Number <span style="color: #dc3545;">*</span></label>
+                        <input type="text" id="login-phone" placeholder="+1234567890">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Include country code (e.g., +1 for US, +94 for Sri Lanka)
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label>API ID <span style="color: #dc3545;">*</span></label>
+                        <input type="number" id="login-api-id" placeholder="12345678">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Get from <a href="https://my.telegram.org" target="_blank">my.telegram.org</a>
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label>API Hash <span style="color: #dc3545;">*</span></label>
+                        <input type="text" id="login-api-hash" placeholder="abcdef1234567890">
+                    </div>
+                    <button class="btn" onclick="sendLoginCode()">Send Code</button>
+                    <button class="btn btn-secondary" onclick="hideLoginForm()">Cancel</button>
+                </div>
+                
+                <div id="login-step-2" style="display: none;">
+                    <div class="form-group">
+                        <label>Verification Code <span style="color: #dc3545;">*</span></label>
+                        <input type="text" id="login-code" placeholder="12345">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Check your Telegram app for the code
+                        </small>
+                    </div>
+                    <button class="btn" onclick="verifyLoginCode()">Verify Code</button>
+                    <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+                </div>
+                
+                <div id="login-step-3" style="display: none;">
+                    <div class="form-group">
+                        <label>2FA Password <span style="color: #dc3545;">*</span></label>
+                        <input type="password" id="login-password" placeholder="Your 2FA password">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Your account has two-factor authentication enabled
+                        </small>
+                    </div>
+                    <button class="btn" onclick="verifyPassword()">Verify Password</button>
+                    <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         let channels = [];
         let jobs = [];
+        let currentLoginPhone = '';
 
         async function loadStats() {
             try {
@@ -178,6 +250,25 @@
 
         async function loadChannels() {
             try {
+                // First check if any accounts are logged in
+                const accountsRes = await fetch('/api/accounts/list');
+                const accountsData = await accountsRes.json();
+                
+                if (accountsData.accounts.length === 0) {
+                    document.getElementById('channels-list').innerHTML = `
+                        <div style="text-align: center; padding: 40px; background: #fff3cd; border-radius: 8px; border: 2px solid #ffc107;">
+                            <h3 style="color: #856404; margin-bottom: 15px;">⚠️ No Accounts Logged In</h3>
+                            <p style="color: #856404; margin-bottom: 20px;">
+                                You need to login a Telegram account first to view channels.
+                            </p>
+                            <button class="btn" onclick="showTab('accounts', document.querySelectorAll('.tab')[3])">
+                                Go to Accounts Tab
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
                 const res = await fetch('/api/channels/list');
                 channels = await res.json();
                 displayChannels(channels);
@@ -187,7 +278,17 @@
         }
 
         async function refreshChannels() {
-            document.getElementById('channels-list').innerHTML = '<div class="loading">Refreshing...</div>';
+            // Check if any accounts are logged in
+            const accountsRes = await fetch('/api/accounts/list');
+            const accountsData = await accountsRes.json();
+            
+            if (accountsData.accounts.length === 0) {
+                alert('Please login a Telegram account first!\n\nGo to the Accounts tab and click "Add Account".');
+                showTab('accounts', document.querySelectorAll('.tab')[3]);
+                return;
+            }
+            
+            document.getElementById('channels-list').innerHTML = '<div class="loading">Fetching channels from Telegram... This may take a moment.</div>';
             try {
                 const res = await fetch('/api/channels/list?refresh=true');
                 channels = await res.json();
@@ -203,13 +304,12 @@
                 return;
             }
             
-            let html = '<table><thead><tr><th>Title</th><th>Channel ID</th><th>Username</th><th>Members</th><th>Type</th></tr></thead><tbody>';
+            let html = '<table><thead><tr><th>Title</th><th>Channel ID</th><th>Username</th><th>Type</th></tr></thead><tbody>';
             data.forEach(ch => {
                 html += `<tr>
                     <td>${ch.title}</td>
                     <td><code>${ch.channel_id}</code></td>
                     <td>${ch.username || '-'}</td>
-                    <td>${ch.member_count || '-'}</td>
                     <td>${ch.is_private ? 'Private' : 'Public'}</td>
                 </tr>`;
             });
@@ -335,6 +435,201 @@
             
             if (tab === 'channels') loadChannels();
             if (tab === 'jobs') loadJobs();
+            if (tab === 'accounts') loadAccounts();
+        }
+
+        // Account Management Functions
+        async function loadAccounts() {
+            try {
+                const res = await fetch('/api/accounts/list');
+                const data = await res.json();
+                displayAccounts(data.accounts);
+            } catch (e) {
+                document.getElementById('accounts-list').innerHTML = '<p>Error loading accounts</p>';
+            }
+        }
+
+        function displayAccounts(accounts) {
+            if (accounts.length === 0) {
+                document.getElementById('accounts-list').innerHTML = '<p>No accounts logged in. Click "Add Account" to get started.</p>';
+                return;
+            }
+            
+            let html = '<table><thead><tr><th>Phone</th><th>Name</th><th>Username</th><th>User ID</th><th>Actions</th></tr></thead><tbody>';
+            accounts.forEach(acc => {
+                html += `<tr>
+                    <td><code>${acc.phone}</code></td>
+                    <td>${acc.first_name} ${acc.last_name}</td>
+                    <td>@${acc.username || 'N/A'}</td>
+                    <td>${acc.user_id}</td>
+                    <td>
+                        <button class="btn btn-danger" onclick="logoutAccount('${acc.phone}')">Logout</button>
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('accounts-list').innerHTML = html;
+        }
+
+        function showLoginForm() {
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('login-step-1').style.display = 'block';
+            document.getElementById('login-step-2').style.display = 'none';
+            document.getElementById('login-step-3').style.display = 'none';
+        }
+
+        function hideLoginForm() {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('login-phone').value = '';
+            document.getElementById('login-api-id').value = '';
+            document.getElementById('login-api-hash').value = '';
+            document.getElementById('login-code').value = '';
+            document.getElementById('login-password').value = '';
+        }
+
+        async function sendLoginCode() {
+            const phone = document.getElementById('login-phone').value;
+            const apiId = document.getElementById('login-api-id').value;
+            const apiHash = document.getElementById('login-api-hash').value;
+            
+            if (!phone || !apiId || !apiHash) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/accounts/login/send-code', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        phone: phone,
+                        api_id: parseInt(apiId),
+                        api_hash: apiHash
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'code_sent') {
+                    currentLoginPhone = phone;
+                    document.getElementById('login-step-1').style.display = 'none';
+                    document.getElementById('login-step-2').style.display = 'block';
+                    alert(data.message);
+                } else if (data.status === 'already_authorized') {
+                    alert('Account already logged in!');
+                    hideLoginForm();
+                    loadAccounts();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function verifyLoginCode() {
+            const code = document.getElementById('login-code').value;
+            
+            if (!code) {
+                alert('Please enter the verification code');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/accounts/login/verify-code', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        phone: currentLoginPhone,
+                        code: code
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    alert('Successfully logged in!');
+                    hideLoginForm();
+                    loadAccounts();
+                } else if (data.status === 'password_required') {
+                    document.getElementById('login-step-2').style.display = 'none';
+                    document.getElementById('login-step-3').style.display = 'block';
+                    alert(data.message);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function verifyPassword() {
+            const password = document.getElementById('login-password').value;
+            
+            if (!password) {
+                alert('Please enter your 2FA password');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/accounts/login/verify-password', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        phone: currentLoginPhone,
+                        password: password
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    alert('Successfully logged in with 2FA!');
+                    hideLoginForm();
+                    loadAccounts();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function cancelLogin() {
+            if (confirm('Cancel login process?')) {
+                hideLoginForm();
+                currentLoginPhone = '';
+            }
+        }
+
+        async function logoutAccount(phone) {
+            if (!confirm(`Logout account ${phone}?\n\nThis will:\n- Delete the session file\n- Clear all channels from the list\n- Remove account from active accounts`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/accounts/logout', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ phone: phone })
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    alert(data.message);
+                    loadAccounts();
+                    // Also refresh channels list since they were cleared
+                    channels = [];
+                    if (document.getElementById('channels-tab').style.display !== 'none') {
+                        loadChannels();
+                    }
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
         }
 
         // Initial load

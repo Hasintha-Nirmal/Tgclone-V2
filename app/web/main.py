@@ -20,11 +20,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application...")
     init_db()
     
-    # Initialize Telegram clients
+    # Initialize Telegram clients (if configured in .env)
     try:
         await session_manager.initialize_all_accounts()
     except Exception as e:
-        logger.error(f"Failed to initialize accounts: {e}")
+        logger.warning(f"Could not initialize .env accounts: {e}")
+        logger.info("You can login accounts via the web dashboard")
     
     # Start sync worker
     asyncio.create_task(sync_worker.start())
@@ -60,6 +61,7 @@ app.include_router(routes.auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(routes.channels_router, prefix="/api/channels", tags=["channels"])
 app.include_router(routes.jobs_router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(routes.system_router, prefix="/api/system", tags=["system"])
+app.include_router(routes.accounts_router, prefix="/api/accounts", tags=["accounts"])
 
 # Serve static files
 try:

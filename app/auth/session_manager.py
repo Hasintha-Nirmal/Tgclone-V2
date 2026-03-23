@@ -32,9 +32,10 @@ class SessionManager:
             
             if not await client.is_user_authorized():
                 logger.info(f"Authorization required for {phone}")
-                await client.send_code_request(phone)
-                # Note: In production, handle code input via web interface
-                logger.warning(f"Please complete authorization for {phone} manually")
+                # Don't try to send code during startup - let web handle it
+                logger.warning(f"Session exists but not authorized for {phone} - login via web")
+                await client.disconnect()
+                return None
             else:
                 logger.info(f"Client {phone} already authorized")
             
@@ -43,44 +44,85 @@ class SessionManager:
             
         except Exception as e:
             logger.error(f"Failed to create client for {phone}: {e}")
-            raise
+            await client.disconnect()
+            return None
     
     async def get_client(self, phone: Optional[str] = None) -> TelegramClient:
         """Get existing client or create primary client"""
+        # If specific phone requested and exists, return it
         if phone and phone in self.clients:
-            return self.clients[phone]
+            client = self.clients[phone]
+            if await client.is_user_authorized():
+                return client
         
-        # Return primary client
-        if settings.telegram_phone in self.clients:
-            return self.clients[settings.telegram_phone]
+        # Return any authorized client
+        for phone, client in self.clients.items():
+            try:
+                if await client.is_user_authorized():
+                    logger.info(f"Using authorized client: {phone}")
+                    return client
+            except:
+                continue
         
-        # Create primary client
-        return await self.create_client(
-            settings.telegram_phone,
-            settings.telegram_api_id,
-            settings.telegram_api_hash
-        )
+        # Try to create/use primary client from .env (if configured)
+        if settings.telegram_phone and settings.telegram_api_id and settings.telegram_api_hash:
+            if settings.telegram_phone in self.clients:
+                client = self.clients[settings.telegram_phone]
+                if await client.is_user_authorized():
+                    return client
+            
+            # Create primary client
+            return await self.create_client(
+                settings.telegram_phone,
+                settings.telegram_api_id,
+                settings.telegram_api_hash
+            )
+        
+        # No clients available
+        raise Exception("No authorized Telegram accounts available. Please login via the Accounts tab.")
     
     async def initialize_all_accounts(self):
-        """Initialize all configured accounts"""
-        accounts = [
-            (settings.telegram_phone, settings.telegram_api_id, settings.telegram_api_hash)
-        ]
+        """Initialize all configured accounts from .env (if any)"""
+        accounts = []
         
-        if settings.telegram_phone_2 and settings.telegram_api_id_2:
+        # Add primary account if configured
+        if settings.telegram_phone and settings.telegram_api_id and settings.telegram_api_hash:
+            accounts.append(
+                (settings.telegram_phone, settings.telegram_api_id, settings.telegram_api_hash)
+            )
+        
+        # Add secondary account if configured
+        if settings.telegram_phone_2 and settings.telegram_api_id_2 and settings.telegram_api_hash_2:
             accounts.append(
                 (settings.telegram_phone_2, settings.telegram_api_id_2, settings.telegram_api_hash_2)
             )
         
+        if not accounts:
+            logger.info("No accounts configured in .env - use web interface to login")
+            return
+        
+        logger.info(f"Attempting to initialize {len(accounts)} account(s) from .env...")
         for phone, api_id, api_hash in accounts:
             try:
-                await self.create_client(phone, api_id, api_hash)
+                client = await self.create_client(phone, api_id, api_hash)
+                if client:
+                    logger.info(f"Successfully initialized account: {phone}")
+                else:
+                    logger.warning(f"Account {phone} needs authorization via web")
             except Exception as e:
                 logger.error(f"Failed to initialize account {phone}: {e}")
     
     def get_available_clients(self) -> List[TelegramClient]:
-        """Get list of all connected clients"""
-        return list(self.clients.values())
+        """Get list of all connected and authorized clients"""
+        available = []
+        for client in self.clients.values():
+            try:
+                # Note: This is synchronous check, may not be 100% accurate
+                # But it's good enough for listing purposes
+                available.append(client)
+            except:
+                continue
+        return available
     
     async def disconnect_all(self):
         """Disconnect all clients"""
@@ -91,5 +133,37 @@ class SessionManager:
             except Exception as e:
                 logger.error(f"Error disconnecting {phone}: {e}")
         self.clients.clear()
+    
+    async def logout_account(self, phone: str) -> bool:
+        """Logout and remove account session"""
+        try:
+            if phone in self.clients:
+                client = self.clients[phone]
+                
+                # Logout from Telegram
+                try:
+                    await client.log_out()
+                    logger.info(f"Logged out from Telegram: {phone}")
+                except Exception as e:
+                    logger.warning(f"Error during logout for {phone}: {e}")
+                
+                # Disconnect client
+                await client.disconnect()
+                
+                # Remove from clients dict
+                del self.clients[phone]
+            
+            # Delete session file
+            session_name = phone.replace("+", "")
+            session_file = self.session_dir / f"{session_name}.session"
+            if session_file.exists():
+                session_file.unlink()
+                logger.info(f"Deleted session file: {session_file}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error logging out {phone}: {e}")
+            return False
 
 session_manager = SessionManager()

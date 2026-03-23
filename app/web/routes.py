@@ -12,12 +12,14 @@ from app.cloner.message_cloner import MessageCloner
 from app.worker.sync_worker import sync_worker
 from app.utils.storage import storage_manager
 from app.utils.logger import logger
+from app.web.telegram_auth import telegram_auth_manager
 
 # Routers
 auth_router = APIRouter()
 channels_router = APIRouter()
 jobs_router = APIRouter()
 system_router = APIRouter()
+accounts_router = APIRouter()
 
 # Models
 class ChannelResponse(BaseModel):
@@ -45,6 +47,22 @@ class CloneJobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class TelegramLoginRequest(BaseModel):
+    phone: str
+    api_id: int
+    api_hash: str
+
+class TelegramCodeRequest(BaseModel):
+    phone: str
+    code: str
+
+class TelegramPasswordRequest(BaseModel):
+    phone: str
+    password: str
+
+class TelegramLogoutRequest(BaseModel):
+    phone: str
+
 # Auth Routes
 @auth_router.get("/status")
 async def auth_status():
@@ -64,10 +82,18 @@ async def list_channels(
 ):
     """List all channels"""
     try:
+        # Check if any accounts are logged in
+        if not session_manager.clients:
+            # No accounts logged in - clear stale channels
+            db.query(Channel).delete()
+            db.commit()
+            return []
+        
         if refresh:
             client = await session_manager.get_client()
             scraper = ChannelScraper(client)
-            channels = await scraper.get_all_channels(save_to_db=True)
+            # Don't fetch member counts - it's slow and not critical
+            channels = await scraper.get_all_channels(save_to_db=True, fetch_member_count=False)
             return channels
         
         # Get from database
@@ -209,7 +235,16 @@ async def delete_job(job_id: str, db: Session = Depends(get_db)):
 @system_router.get("/stats")
 async def system_stats(db: Session = Depends(get_db)):
     """Get system statistics"""
-    total_channels = db.query(Channel).count()
+    # Check if any accounts are logged in
+    if not session_manager.clients:
+        # No accounts - clear stale channels and return zeros
+        db.query(Channel).delete()
+        db.commit()
+        
+        total_channels = 0
+    else:
+        total_channels = db.query(Channel).count()
+    
     total_jobs = db.query(CloneJob).count()
     active_jobs = db.query(CloneJob).filter(
         CloneJob.status.in_(["running", "pending"])
@@ -229,6 +264,67 @@ async def cleanup_storage():
     """Cleanup old files"""
     storage_manager.cleanup_old_files(max_age_hours=24)
     return {"message": "Cleanup completed"}
+
+# Account Management Routes
+@accounts_router.get("/list")
+async def list_accounts():
+    """List all logged in accounts"""
+    try:
+        accounts = await telegram_auth_manager.get_logged_accounts()
+        return {"accounts": accounts}
+    except Exception as e:
+        logger.error(f"Error listing accounts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@accounts_router.post("/login/send-code")
+async def send_login_code(request: TelegramLoginRequest):
+    """Send verification code to phone"""
+    try:
+        result = await telegram_auth_manager.send_code(
+            request.phone,
+            request.api_id,
+            request.api_hash
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error sending code: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@accounts_router.post("/login/verify-code")
+async def verify_login_code(request: TelegramCodeRequest):
+    """Verify the code and complete login"""
+    try:
+        result = await telegram_auth_manager.verify_code(
+            request.phone,
+            request.code
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error verifying code: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@accounts_router.post("/login/verify-password")
+async def verify_2fa_password(request: TelegramPasswordRequest):
+    """Verify 2FA password"""
+    try:
+        result = await telegram_auth_manager.verify_password(
+            request.phone,
+            request.password
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error verifying password: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@accounts_router.post("/logout")
+async def logout_account(request: TelegramLogoutRequest):
+    """Logout account and remove session"""
+    try:
+        result = await telegram_auth_manager.logout_account(request.phone)
+        return result
+    except Exception as e:
+        logger.error(f"Error logging out: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Background task
 async def run_clone_job(

@@ -9,6 +9,7 @@ A complete Python-based Telegram automation system for channel management, cloni
 - **Channel Cloner**: Clone messages with media preservation
 - **Auto Sync**: Real-time message detection and cloning
 - **Multi-Account Support**: Manage multiple Telegram accounts
+- **Web Account Management**: Login/logout accounts via web interface with 2FA support 🆕
 - **Web Dashboard**: FastAPI-based UI for management
 - **Storage Optimized**: Auto-delete files after upload
 - **Docker Ready**: Full containerization support
@@ -87,9 +88,11 @@ telegram-automation/
 
 Quick links:
 - **[NEXT_STEPS.md](docs/NEXT_STEPS.md)** - What to do right now ⭐
+- [ACCOUNT_MANAGEMENT.md](docs/ACCOUNT_MANAGEMENT.md) - Manage accounts via web 🆕
 - [SETUP.md](docs/SETUP.md) - Detailed setup instructions
 - [AUTHORIZATION.md](docs/AUTHORIZATION.md) - Authorization troubleshooting
 - [RATE_LIMITING.md](docs/RATE_LIMITING.md) - Account protection & rate limits 🛡️
+- [SECURITY.md](docs/SECURITY.md) - Security guide 🔒
 - [FEATURES.md](docs/FEATURES.md) - Complete feature list
 - [VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md) - Architecture diagrams
 - [QUICKSTART.md](docs/QUICKSTART.md) - Quick start guide

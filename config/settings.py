@@ -1,17 +1,34 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 import os
 
 class Settings(BaseSettings):
-    # Telegram
-    telegram_api_id: int
-    telegram_api_hash: str
-    telegram_phone: str
+    # Telegram (now optional - can login via web)
+    telegram_api_id: Optional[int] = None
+    telegram_api_hash: Optional[str] = None
+    telegram_phone: Optional[str] = None
     
     # Additional accounts
     telegram_api_id_2: Optional[int] = None
     telegram_api_hash_2: Optional[str] = None
     telegram_phone_2: Optional[str] = None
+    
+    @field_validator('telegram_api_id', 'telegram_api_id_2', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        """Convert empty string to None for optional integer fields"""
+        if v == '' or v is None:
+            return None
+        return v
+    
+    @field_validator('telegram_api_hash', 'telegram_api_hash_2', 'telegram_phone', 'telegram_phone_2', mode='before')
+    @classmethod
+    def empty_str_to_none_str(cls, v):
+        """Convert empty string to None for optional string fields"""
+        if v == '':
+            return None
+        return v
     
     # Database
     database_url: str = "sqlite:///./data/app.db"

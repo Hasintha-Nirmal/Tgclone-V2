@@ -9,14 +9,19 @@ class ChannelScraper:
     def __init__(self, client: TelegramClient):
         self.client = client
     
-    async def get_all_channels(self, save_to_db: bool = True) -> List[Dict]:
-        """Fetch all joined channels"""
+    async def get_all_channels(self, save_to_db: bool = True, fetch_member_count: bool = False) -> List[Dict]:
+        """Fetch all joined channels
+        
+        Args:
+            save_to_db: Save channels to database
+            fetch_member_count: Fetch member count (slow, makes extra API calls)
+        """
         channels = []
         
         try:
             async for dialog in self.client.iter_dialogs():
                 if isinstance(dialog.entity, Channel):
-                    channel_info = await self._extract_channel_info(dialog.entity)
+                    channel_info = await self._extract_channel_info(dialog.entity, fetch_member_count)
                     channels.append(channel_info)
                     
                     if save_to_db:
@@ -29,14 +34,22 @@ class ChannelScraper:
             logger.error(f"Error fetching channels: {e}")
             raise
     
-    async def _extract_channel_info(self, channel: Channel) -> Dict:
-        """Extract detailed channel information"""
-        try:
-            # Get full channel info for member count
-            full_channel = await self.client(GetFullChannelRequest(channel))
-            member_count = full_channel.full_chat.participants_count
-        except:
-            member_count = None
+    async def _extract_channel_info(self, channel: Channel, fetch_member_count: bool = False) -> Dict:
+        """Extract detailed channel information
+        
+        Args:
+            channel: Channel entity
+            fetch_member_count: Whether to fetch member count (requires extra API call)
+        """
+        member_count = None
+        
+        # Only fetch member count if explicitly requested (slow operation)
+        if fetch_member_count:
+            try:
+                full_channel = await self.client(GetFullChannelRequest(channel))
+                member_count = full_channel.full_chat.participants_count
+            except:
+                member_count = None
         
         # Format channel ID to -100 format
         channel_id = f"-100{channel.id}"
