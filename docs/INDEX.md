@@ -33,21 +33,27 @@ Welcome to the Telegram Automation System documentation! Here's where to find ev
    - 2FA setup
    - Multi-account authorization
 
+6. **[SECURITY.md](SECURITY.md)**
+   - Web dashboard authentication
+   - Password management
+   - Security best practices
+   - Production deployment security
+
 ## 📚 Reference Documentation
 
-6. **[FEATURES.md](FEATURES.md)**
-   - Complete feature list
-   - Technical capabilities
-   - API endpoints
-   - System requirements
+7. **[RATE_LIMITING.md](RATE_LIMITING.md)**
+   - Account protection mechanisms
+   - Rate limiting configuration
+   - Best practices to avoid bans
+   - Performance vs safety trade-offs
 
-7. **[VISUAL_GUIDE.md](VISUAL_GUIDE.md)**
+8. **[VISUAL_GUIDE.md](VISUAL_GUIDE.md)**
    - Architecture diagrams
    - Data flow visualization
    - How everything works
    - User journey maps
 
-8. **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)**
+9. **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)**
    - Complete project overview
    - File structure
    - Technical highlights

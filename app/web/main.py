@@ -2,13 +2,17 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from contextlib import asynccontextmanager
 from app.web import routes
+from app.web.auth import check_auth, auth_middleware
 from app.utils.database import init_db
 from app.auth.session_manager import session_manager
 from app.worker.sync_worker import sync_worker
 from app.utils.logger import logger
 import asyncio
+
+security = HTTPBasic()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,6 +43,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add authentication middleware
+app.middleware("http")(auth_middleware)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -61,8 +68,9 @@ except:
     pass
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def root(credentials: HTTPBasicCredentials = Depends(security)):
     """Serve main dashboard"""
+    check_auth(credentials)
     try:
         with open("app/web/templates/index.html", "r") as f:
             return f.read()

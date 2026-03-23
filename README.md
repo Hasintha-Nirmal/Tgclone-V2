@@ -115,6 +115,25 @@ python authorize.py
 
 You'll receive a verification code in your Telegram app. Enter it when prompted.
 
+## 🔒 Security Notice
+
+The web dashboard is protected with HTTP Basic Authentication.
+
+**Default credentials** (⚠️ CHANGE IMMEDIATELY):
+```
+Username: admin
+Password: changeme123
+```
+
+**To change**: Edit `.env` file and restart:
+```bash
+ADMIN_USERNAME=your_username
+ADMIN_PASSWORD=your_strong_password
+docker-compose restart telegram-automation
+```
+
+See [SECURITY.md](docs/SECURITY.md) for complete security guide.
+
 ## Management CLI
 
 Quick commands for common tasks:
