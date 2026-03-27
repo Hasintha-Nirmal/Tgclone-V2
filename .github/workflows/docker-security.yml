@@ -7,6 +7,9 @@ on:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # Required for uploading SARIF results
     
     steps:
     - name: Checkout code
