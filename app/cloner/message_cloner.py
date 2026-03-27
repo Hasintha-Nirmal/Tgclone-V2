@@ -1,6 +1,6 @@
 from telethon import TelegramClient
 from telethon.tl.types import Message, MessageMediaPhoto, MessageMediaDocument
-from telethon.errors import FloodWaitError, NetworkError, TimeoutError as TelethonTimeoutError
+from telethon.errors import FloodWaitError
 from typing import Optional, AsyncGenerator
 from pathlib import Path
 from app.utils.logger import logger
@@ -140,7 +140,7 @@ class MessageCloner:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((NetworkError, TelethonTimeoutError, ConnectionError)),
+        retry=retry_if_exception_type((OSError, ConnectionError, TimeoutError)),
         before_sleep=before_sleep_log(logger, logger.level)
     )
     async def _clone_single_message_with_retry(

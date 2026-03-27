@@ -12,12 +12,13 @@ services:
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
     # Mount source code for hot-reload (if using --reload)
+    # Use named volumes for data/logs to avoid Windows permission issues
     volumes:
       - ./app:/app/app:ro
       - ./config:/app/config:ro
       - ./sessions:/app/sessions
-      - ./logs:/app/logs
-      - ./data:/app/data
+      - dev-logs:/app/logs
+      - dev-data:/app/data
       - telegram-downloads:/app/downloads
     # Remove resource limits for development
     deploy:
@@ -27,6 +28,8 @@ services:
           memory: 4G
     # Disable read-only for easier debugging
     read_only: false
+    # Remove user restriction in dev mode to avoid permission issues on Windows
+    user: ""
     # Development command with auto-reload
     command: ["uvicorn", "app.web.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     # Expose additional ports for debugging
@@ -52,5 +55,7 @@ services:
 
 volumes:
   telegram-downloads:
+  dev-logs:
+  dev-data:
   redis-data:
   postgres-data:
