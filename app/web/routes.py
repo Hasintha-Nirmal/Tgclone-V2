@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
+from contextlib import asynccontextmanager
 import uuid
+import re
+import asyncio
 
-from app.utils.database import get_db, Channel, CloneJob, SyncState
+from app.utils.database import get_db, SessionLocal, Channel, CloneJob, SyncState
 from app.auth.session_manager import session_manager
 from app.scraper.channel_scraper import ChannelScraper
 from app.cloner.message_cloner import MessageCloner
@@ -21,7 +24,20 @@ jobs_router = APIRouter()
 system_router = APIRouter()
 accounts_router = APIRouter()
 
-# Models
+# Async context manager for database sessions
+@asynccontextmanager
+async def get_db_context():
+    """Async context manager for database sessions"""
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+# Models with validation
 class ChannelResponse(BaseModel):
     channel_id: str
     title: str
@@ -30,11 +46,51 @@ class ChannelResponse(BaseModel):
     is_private: bool
 
 class CloneJobCreate(BaseModel):
-    source_channel: str
-    target_channel: str
-    start_message_id: Optional[int] = None
-    limit: Optional[int] = None
-    auto_sync: bool = False
+    """Request to create a clone job with validation"""
+    source_channel: str = Field(
+        ..., 
+        min_length=1,
+        max_length=50,
+        description="Source channel ID or @username"
+    )
+    target_channel: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Target channel ID or @username"
+    )
+    start_message_id: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Start from message ID (must be >= 0)"
+    )
+    limit: Optional[int] = Field(
+        None,
+        ge=1,
+        le=10000,
+        description="Max messages to clone (1-10000)"
+    )
+    auto_sync: bool = Field(
+        False,
+        description="Enable auto-sync"
+    )
+    
+    @validator('source_channel', 'target_channel')
+    def validate_channel_format(cls, v):
+        """Validate channel ID format"""
+        # Channel IDs should be numeric (with optional -100 prefix) or @username
+        if not (re.match(r'^-?100?\d+$', v) or re.match(r'^@[\w]{5,32}$', v)):
+            raise ValueError(
+                "Channel must be numeric ID (e.g., -1001234567890) or @username"
+            )
+        return v
+    
+    @validator('target_channel')
+    def validate_different_channels(cls, v, values):
+        """Ensure source and target are different"""
+        if 'source_channel' in values and v == values['source_channel']:
+            raise ValueError("Source and target channels must be different")
+        return v
 
 class CloneJobResponse(BaseModel):
     job_id: str
@@ -48,20 +104,20 @@ class CloneJobResponse(BaseModel):
     updated_at: datetime
 
 class TelegramLoginRequest(BaseModel):
-    phone: str
-    api_id: int
-    api_hash: str
+    phone: str = Field(..., min_length=10, max_length=20)
+    api_id: int = Field(..., gt=0)
+    api_hash: str = Field(..., min_length=32, max_length=32)
 
 class TelegramCodeRequest(BaseModel):
-    phone: str
-    code: str
+    phone: str = Field(..., min_length=10, max_length=20)
+    code: str = Field(..., min_length=5, max_length=10)
 
 class TelegramPasswordRequest(BaseModel):
-    phone: str
-    password: str
+    phone: str = Field(..., min_length=10, max_length=20)
+    password: str = Field(..., min_length=1)
 
 class TelegramLogoutRequest(BaseModel):
-    phone: str
+    phone: str = Field(..., min_length=10, max_length=20)
 
 # Auth Routes
 @auth_router.get("/status")
@@ -142,7 +198,7 @@ async def create_clone_job(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Create a new clone job"""
+    """Create a new clone job with validation"""
     try:
         job_id = str(uuid.uuid4())
         
@@ -171,9 +227,12 @@ async def create_clone_job(
         )
         
         return job
+    except ValueError as e:
+        # Pydantic validation error
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating clone job: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create job")
 
 @jobs_router.get("/list", response_model=List[CloneJobResponse])
 async def list_jobs(
@@ -326,7 +385,7 @@ async def logout_account(request: TelegramLogoutRequest):
         logger.error(f"Error logging out: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Background task
+# Background task with async context manager
 async def run_clone_job(
     job_id: str,
     source_channel: str,
@@ -335,65 +394,76 @@ async def run_clone_job(
     limit: Optional[int],
     auto_sync: bool
 ):
-    """Run clone job in background"""
-    from app.utils.database import SessionLocal
+    """Run clone job in background with proper async context"""
     
-    db = SessionLocal()
-    
-    try:
-        # Update status
-        job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-        if not job:
-            logger.error(f"Job {job_id} not found")
-            return
-            
-        job.status = "running"
-        db.commit()
-        
-        # Get client and cloner
-        client = await session_manager.get_client()
-        cloner = MessageCloner(client)
-        
-        # Clone messages
-        processed = 0
-        async for result in cloner.clone_messages(
-            source_channel,
-            target_channel,
-            start_id=start_message_id,
-            limit=limit,
-            job_id=job_id
-        ):
-            if result["status"] == "success":
-                processed += 1
-                # Refresh job from database to avoid detached instance
-                db.refresh(job)
-                job.processed_messages = processed
-                db.commit()
-        
-        # Refresh and update final status
-        db.refresh(job)
-        job.status = "completed"
-        job.updated_at = datetime.utcnow()
-        db.commit()
-        
-        # Add to sync worker if auto_sync
-        if auto_sync:
-            sync_worker.add_job(job_id)
-        
-        # Cleanup job files
-        storage_manager.cleanup_job(job_id)
-        
-    except Exception as e:
-        logger.error(f"Job {job_id} failed: {e}")
+    async with get_db_context() as db:
         try:
-            # Create new session for error handling
-            db.rollback()
-            job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-            if job:
-                job.status = "failed"
-                job.error_message = str(e)
-                db.commit()
-        except Exception as db_error:
-            logger.error(f"Failed to update job status: {db_error}")
-    finally:
-        db.close()
+            # Update status to running
+            result = db.query(CloneJob).filter(
+                CloneJob.job_id == job_id,
+                CloneJob.status == "pending"
+            ).update({"status": "running"})
+            db.commit()
+            
+            if result == 0:
+                logger.error(f"Job {job_id} not found or not in pending state")
+                return
+            
+            # Get client and cloner
+            client = await session_manager.get_client()
+            cloner = MessageCloner(client)
+            
+            # Clone messages
+            processed = 0
+            async for result in cloner.clone_messages(
+                source_channel,
+                target_channel,
+                start_id=start_message_id,
+                limit=limit,
+                job_id=job_id
+            ):
+                if result["status"] == "success":
+                    processed += 1
+                    # Atomic update
+                    db.query(CloneJob).filter(
+                        CloneJob.job_id == job_id
+                    ).update({"processed_messages": processed})
+                    db.commit()
+            
+            # Mark as completed
+            db.query(CloneJob).filter(
+                CloneJob.job_id == job_id
+            ).update({
+                "status": "completed",
+                "updated_at": datetime.utcnow()
+            })
+            db.commit()
+            
+            # Add to sync worker if auto_sync
+            if auto_sync:
+                sync_worker.add_job(job_id)
+            
+            # Cleanup job files
+            storage_manager.cleanup_job(job_id)
+            
+        except asyncio.CancelledError:
+            logger.warning(f"Job {job_id} was cancelled")
+            db.query(CloneJob).filter(
+                CloneJob.job_id == job_id
+            ).update({
+                "status": "paused",
+                "updated_at": datetime.utcnow()
+            })
+            db.commit()
+            raise
+            
+        except Exception as e:
+            logger.error(f"Job {job_id} failed: {e}")
+            db.query(CloneJob).filter(
+                CloneJob.job_id == job_id
+            ).update({
+                "status": "failed",
+                "error_message": str(e),
+                "updated_at": datetime.utcnow()
+            })
+            db.commit()

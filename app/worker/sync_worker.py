@@ -12,6 +12,10 @@ class SyncWorker:
         self.active_jobs: Set[str] = set()
         self.running = False
         self.tasks: Dict[str, asyncio.Task] = {}
+        
+        # Global rate limiting across all jobs
+        self.global_message_count = 0
+        self.last_hour_reset = datetime.utcnow()
     
     async def start(self):
         """Start the sync worker"""
@@ -38,6 +42,10 @@ class SyncWorker:
         for task in self.tasks.values():
             task.cancel()
         
+        # Wait for tasks to complete cancellation
+        if self.tasks:
+            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        
         logger.info("Sync worker stopped")
     
     async def _load_active_jobs(self):
@@ -46,7 +54,7 @@ class SyncWorker:
         try:
             jobs = db.query(CloneJob).filter(
                 CloneJob.auto_sync == True,
-                CloneJob.status.in_(["running", "pending"])
+                CloneJob.status.in_(["running", "pending", "paused"])
             ).all()
             
             for job in jobs:
@@ -56,14 +64,40 @@ class SyncWorker:
             db.close()
     
     async def _check_and_sync(self):
-        """Check for new messages and sync"""
+        """Check for new messages and sync with global rate limiting"""
+        
+        # Reset hourly counter if needed
+        now = datetime.utcnow()
+        if (now - self.last_hour_reset).total_seconds() >= 3600:
+            logger.info(
+                f"Hourly reset: processed {self.global_message_count} messages in last hour"
+            )
+            self.global_message_count = 0
+            self.last_hour_reset = now
+        
+        # Check if we've hit global limit
+        if self.global_message_count >= settings.max_messages_per_hour:
+            logger.warning(
+                f"Global hourly message limit reached "
+                f"({self.global_message_count}/{settings.max_messages_per_hour}). "
+                f"Pausing sync until next hour."
+            )
+            return
+        
+        # Calculate remaining capacity
+        remaining = settings.max_messages_per_hour - self.global_message_count
+        
         db = SessionLocal()
         try:
             for job_id in list(self.active_jobs):
+                if remaining <= 0:
+                    logger.debug("No remaining capacity for this hour")
+                    break
+                
                 job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
                 
                 if not job or not job.auto_sync:
-                    self.active_jobs.remove(job_id)
+                    self.active_jobs.discard(job_id)
                     continue
                 
                 # Check if already syncing
@@ -77,18 +111,20 @@ class SyncWorker:
             db.close()
     
     async def _sync_job(self, job: CloneJob):
-        """Sync a single job"""
+        """Sync a single job with rate limit tracking"""
         try:
             logger.info(f"Syncing job: {job.job_id}")
             
             # Get last synced message ID
             db = SessionLocal()
-            sync_state = db.query(SyncState).filter(
-                SyncState.job_id == job.job_id
-            ).first()
-            
-            last_message_id = sync_state.last_message_id if sync_state else None
-            db.close()
+            try:
+                sync_state = db.query(SyncState).filter(
+                    SyncState.job_id == job.job_id
+                ).first()
+                
+                last_message_id = sync_state.last_message_id if sync_state else None
+            finally:
+                db.close()
             
             # Get client and cloner
             client = await session_manager.get_client()
@@ -101,30 +137,47 @@ class SyncWorker:
                 logger.debug(f"No new messages for job {job.job_id}")
                 return
             
-            # Clone new messages
+            # Clone new messages and track count
             new_count = 0
             async for result in cloner.clone_messages(
                 job.source_channel,
                 job.target_channel,
                 start_id=last_message_id,
-                job_id=job.job_id
+                job_id=job.job_id,
+                timeout_seconds=300  # 5 minute timeout for sync operations
             ):
                 if result["status"] == "success":
                     new_count += 1
-                    # Update sync state
+                    self.global_message_count += 1  # Track globally
                     self._update_sync_state(job.job_id, result["message_id"])
+                    
+                    # Check if we've hit limit during sync
+                    if self.global_message_count >= settings.max_messages_per_hour:
+                        logger.warning(
+                            f"Hourly limit reached during sync. "
+                            f"Stopping job {job.job_id}"
+                        )
+                        break
             
-            logger.info(f"Synced {new_count} new messages for job {job.job_id}")
+            logger.info(
+                f"Synced {new_count} messages for job {job.job_id} "
+                f"(global: {self.global_message_count}/{settings.max_messages_per_hour})"
+            )
             
             # Update job
             db = SessionLocal()
-            job = db.query(CloneJob).filter(CloneJob.job_id == job.job_id).first()
-            if job:
-                job.processed_messages += new_count
-                job.updated_at = datetime.utcnow()
-                db.commit()
-            db.close()
+            try:
+                job = db.query(CloneJob).filter(CloneJob.job_id == job.job_id).first()
+                if job:
+                    job.processed_messages += new_count
+                    job.updated_at = datetime.utcnow()
+                    db.commit()
+            finally:
+                db.close()
             
+        except asyncio.CancelledError:
+            logger.info(f"Sync job {job.job_id} was cancelled")
+            raise
         except Exception as e:
             logger.error(f"Error syncing job {job.job_id}: {e}")
     
@@ -158,7 +211,7 @@ class SyncWorker:
     def remove_job(self, job_id: str):
         """Remove a job from active sync"""
         if job_id in self.active_jobs:
-            self.active_jobs.remove(job_id)
+            self.active_jobs.discard(job_id)
         
         if job_id in self.tasks:
             self.tasks[job_id].cancel()

@@ -1,5 +1,6 @@
 from telethon import TelegramClient
 from telethon.tl.types import Message, MessageMediaPhoto, MessageMediaDocument
+from telethon.errors import FloodWaitError, NetworkError, TimeoutError as TelethonTimeoutError
 from typing import Optional, AsyncGenerator
 from pathlib import Path
 from app.utils.logger import logger
@@ -7,6 +8,14 @@ from app.utils.storage import storage_manager
 from config.settings import settings
 import asyncio
 from datetime import datetime, timedelta
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
+
 
 class MessageCloner:
     def __init__(self, client: TelegramClient):
@@ -19,9 +28,10 @@ class MessageCloner:
         target_channel: str,
         start_id: Optional[int] = None,
         limit: Optional[int] = None,
-        job_id: Optional[str] = None
+        job_id: Optional[str] = None,
+        timeout_seconds: int = 3600
     ) -> AsyncGenerator[dict, None]:
-        """Clone messages from source to target channel"""
+        """Clone messages from source to target channel with timeout"""
         
         try:
             source_entity = await self.client.get_entity(int(source_channel))
@@ -40,7 +50,7 @@ class MessageCloner:
                     # Check hourly rate limit
                     await self._check_rate_limit()
                     
-                    result = await self._clone_single_message(
+                    result = await self._clone_single_message_with_retry(
                         message, 
                         target_entity, 
                         job_id
@@ -57,6 +67,27 @@ class MessageCloner:
                         "has_media": bool(message.media)
                     }
                     
+                except FloodWaitError as e:
+                    logger.warning(f"Flood wait: {e.seconds}s. Pausing...")
+                    await asyncio.sleep(e.seconds + 1)
+                    # Retry this message
+                    try:
+                        result = await self._clone_single_message(message, target_entity, job_id)
+                        message_count += 1
+                        self.message_timestamps.append(datetime.utcnow())
+                        yield {
+                            "status": "success",
+                            "message_id": message.id,
+                            "count": message_count,
+                            "has_media": bool(message.media)
+                        }
+                    except Exception as retry_error:
+                        logger.error(f"Failed to clone message {message.id} after flood wait: {retry_error}")
+                        yield {
+                            "status": "error",
+                            "message_id": message.id,
+                            "error": str(retry_error)
+                        }
                 except Exception as e:
                     logger.error(f"Failed to clone message {message.id}: {e}")
                     yield {
@@ -73,14 +104,29 @@ class MessageCloner:
                 
                 # Extra break every N messages to avoid detection
                 if message_count % settings.break_every_n_messages == 0:
-                    logger.info(f"Processed {message_count} messages, taking a {settings.break_duration}s break...")
+                    logger.info(f"Processed {message_count} messages, taking a {settings.break_duration}s break")
                     await asyncio.sleep(settings.break_duration)
             
             logger.info(f"Cloned {message_count} messages")
-            
+        
         except Exception as e:
             logger.error(f"Clone operation failed: {e}")
             raise
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((NetworkError, TelethonTimeoutError, ConnectionError)),
+        before_sleep=before_sleep_log(logger, logger.level)
+    )
+    async def _clone_single_message_with_retry(
+        self,
+        message: Message,
+        target_entity,
+        job_id: Optional[str] = None
+    ):
+        """Clone a single message with automatic retry on transient failures"""
+        return await self._clone_single_message(message, target_entity, job_id)
     
     async def _clone_single_message(
         self,

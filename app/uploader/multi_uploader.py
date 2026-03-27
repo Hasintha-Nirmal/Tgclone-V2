@@ -6,6 +6,7 @@ from app.utils.logger import logger
 from config.settings import settings
 import asyncio
 import random
+import time
 
 class MultiAccountUploader:
     def __init__(self, clients: List[TelegramClient]):
@@ -15,7 +16,6 @@ class MultiAccountUploader:
     
     def _get_next_available_client(self) -> Optional[TelegramClient]:
         """Get next client that's not in flood wait"""
-        import time
         now = time.time()
         
         for _ in range(len(self.clients)):
@@ -71,7 +71,6 @@ class MultiAccountUploader:
                 wait_time = e.seconds * settings.flood_wait_multiplier
                 logger.warning(f"FloodWait: {wait_time}s for client {self.current_index}")
                 
-                import time
                 self.flood_wait_until[id(client)] = time.time() + wait_time
                 
                 # Try next client
