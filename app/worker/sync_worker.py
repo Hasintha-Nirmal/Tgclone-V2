@@ -1,21 +1,20 @@
 import asyncio
 from typing import Dict, Set
 from app.utils.logger import logger
-from app.utils.database import SessionLocal, CloneJob, SyncState
+from app.utils.database import AsyncSessionLocal, CloneJob, SyncState
+from app.utils.rate_limiter import global_rate_limiter
 from app.cloner.message_cloner import MessageCloner
 from app.auth.session_manager import session_manager
 from config.settings import settings
 from datetime import datetime
+from sqlalchemy import select, update
 
 class SyncWorker:
     def __init__(self):
         self.active_jobs: Set[str] = set()
         self.running = False
         self.tasks: Dict[str, asyncio.Task] = {}
-        
-        # Global rate limiting across all jobs
-        self.global_message_count = 0
-        self.last_hour_reset = datetime.utcnow()
+        self.shutdown_timeout = settings.worker_shutdown_timeout
     
     async def start(self):
         """Start the sync worker"""
@@ -35,80 +34,104 @@ class SyncWorker:
                 await asyncio.sleep(5)
     
     async def stop(self):
-        """Stop the sync worker"""
+        """Stop the sync worker gracefully with timeout"""
+        logger.info("Initiating graceful shutdown...")
         self.running = False
         
+        if not self.tasks:
+            logger.info("No active tasks to shutdown")
+            return
+        
         # Cancel all tasks
-        for task in self.tasks.values():
+        for job_id, task in self.tasks.items():
+            logger.info(f"Cancelling task: {job_id}")
             task.cancel()
         
-        # Wait for tasks to complete cancellation
-        if self.tasks:
-            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        # Wait for tasks to complete with timeout
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*self.tasks.values(), return_exceptions=True),
+                timeout=self.shutdown_timeout
+            )
+            logger.info("All tasks completed gracefully")
+        except asyncio.TimeoutError:
+            logger.warning(f"Shutdown timeout after {self.shutdown_timeout}s - some tasks may not have completed")
         
+        self.tasks.clear()
         logger.info("Sync worker stopped")
     
     async def _load_active_jobs(self):
         """Load active sync jobs from database"""
-        db = SessionLocal()
-        try:
-            jobs = db.query(CloneJob).filter(
-                CloneJob.auto_sync == True,
-                CloneJob.status.in_(["running", "pending", "paused"])
-            ).all()
-            
-            for job in jobs:
-                self.active_jobs.add(job.job_id)
-                logger.info(f"Loaded sync job: {job.job_id}")
-        finally:
-            db.close()
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(CloneJob).filter(
+                        CloneJob.auto_sync == True,
+                        CloneJob.status.in_(["running", "pending", "paused"])
+                    )
+                )
+                jobs = result.scalars().all()
+                
+                for job in jobs:
+                    self.active_jobs.add(job.job_id)
+                    logger.info(f"Loaded sync job: {job.job_id}")
+            except Exception as e:
+                logger.error(f"Error loading active jobs: {e}")
     
     async def _check_and_sync(self):
         """Check for new messages and sync with global rate limiting"""
         
-        # Reset hourly counter if needed
-        now = datetime.utcnow()
-        if (now - self.last_hour_reset).total_seconds() >= 3600:
-            logger.info(
-                f"Hourly reset: processed {self.global_message_count} messages in last hour"
-            )
-            self.global_message_count = 0
-            self.last_hour_reset = now
+        # Get current rate limit count from global rate limiter
+        current_count = await global_rate_limiter.get_current_count()
         
         # Check if we've hit global limit
-        if self.global_message_count >= settings.max_messages_per_hour:
+        if current_count >= settings.max_messages_per_hour:
             logger.warning(
                 f"Global hourly message limit reached "
-                f"({self.global_message_count}/{settings.max_messages_per_hour}). "
+                f"({current_count}/{settings.max_messages_per_hour}). "
                 f"Pausing sync until next hour."
             )
             return
         
         # Calculate remaining capacity
-        remaining = settings.max_messages_per_hour - self.global_message_count
+        remaining = settings.max_messages_per_hour - current_count
         
-        db = SessionLocal()
-        try:
-            for job_id in list(self.active_jobs):
-                if remaining <= 0:
-                    logger.debug("No remaining capacity for this hour")
-                    break
-                
-                job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-                
-                if not job or not job.auto_sync:
-                    self.active_jobs.discard(job_id)
-                    continue
-                
-                # Check if already syncing
-                if job_id in self.tasks and not self.tasks[job_id].done():
-                    continue
-                
-                # Start sync task
-                task = asyncio.create_task(self._sync_job(job))
-                self.tasks[job_id] = task
-        finally:
-            db.close()
+        async with AsyncSessionLocal() as db:
+            try:
+                for job_id in list(self.active_jobs):
+                    if remaining <= 0:
+                        logger.debug("No remaining capacity for this hour")
+                        break
+                    
+                    result = await db.execute(
+                        select(CloneJob).filter(CloneJob.job_id == job_id)
+                    )
+                    job = result.scalar_one_or_none()
+                    
+                    if not job or not job.auto_sync:
+                        self.active_jobs.discard(job_id)
+                        continue
+                    
+                    # Check if already syncing
+                    if job_id in self.tasks and not self.tasks[job_id].done():
+                        continue
+                    
+                    # Start sync task with exception handling
+                    task = asyncio.create_task(self._sync_job(job))
+                    
+                    # Add exception callback to prevent silent failures
+                    def handle_task_exception(t, jid=job_id):
+                        try:
+                            t.result()
+                        except asyncio.CancelledError:
+                            pass  # Expected during shutdown
+                        except Exception as e:
+                            logger.error(f"Sync task {jid} failed with unhandled exception: {e}", exc_info=True)
+                    
+                    task.add_done_callback(handle_task_exception)
+                    self.tasks[job_id] = task
+            except Exception as e:
+                logger.error(f"Error in check_and_sync: {e}")
     
     async def _sync_job(self, job: CloneJob):
         """Sync a single job with rate limit tracking"""
@@ -116,15 +139,17 @@ class SyncWorker:
             logger.info(f"Syncing job: {job.job_id}")
             
             # Get last synced message ID
-            db = SessionLocal()
-            try:
-                sync_state = db.query(SyncState).filter(
-                    SyncState.job_id == job.job_id
-                ).first()
-                
-                last_message_id = sync_state.last_message_id if sync_state else None
-            finally:
-                db.close()
+            async with AsyncSessionLocal() as db:
+                try:
+                    result = await db.execute(
+                        select(SyncState).filter(SyncState.job_id == job.job_id)
+                    )
+                    sync_state = result.scalar_one_or_none()
+                    
+                    last_message_id = sync_state.last_message_id if sync_state else None
+                except Exception as e:
+                    logger.error(f"Error getting sync state: {e}")
+                    last_message_id = None
             
             # Get client and cloner
             client = await session_manager.get_client()
@@ -148,11 +173,11 @@ class SyncWorker:
             ):
                 if result["status"] == "success":
                     new_count += 1
-                    self.global_message_count += 1  # Track globally
-                    self._update_sync_state(job.job_id, result["message_id"])
+                    await self._update_sync_state(job.job_id, result["message_id"])
                     
                     # Check if we've hit limit during sync
-                    if self.global_message_count >= settings.max_messages_per_hour:
+                    current_count = await global_rate_limiter.get_current_count()
+                    if current_count >= settings.max_messages_per_hour:
                         logger.warning(
                             f"Hourly limit reached during sync. "
                             f"Stopping job {job.job_id}"
@@ -161,47 +186,55 @@ class SyncWorker:
             
             logger.info(
                 f"Synced {new_count} messages for job {job.job_id} "
-                f"(global: {self.global_message_count}/{settings.max_messages_per_hour})"
+                f"(global: {await global_rate_limiter.get_current_count()}/{settings.max_messages_per_hour})"
             )
             
             # Update job
-            db = SessionLocal()
-            try:
-                job = db.query(CloneJob).filter(CloneJob.job_id == job.job_id).first()
-                if job:
-                    job.processed_messages += new_count
-                    job.updated_at = datetime.utcnow()
-                    db.commit()
-            finally:
-                db.close()
+            async with AsyncSessionLocal() as db:
+                try:
+                    result = await db.execute(
+                        select(CloneJob).filter(CloneJob.job_id == job.job_id)
+                    )
+                    job = result.scalar_one_or_none()
+                    if job:
+                        job.processed_messages += new_count
+                        job.updated_at = datetime.utcnow()
+                        await db.commit()
+                except Exception as e:
+                    logger.error(f"Error updating job: {e}")
             
         except asyncio.CancelledError:
-            logger.info(f"Sync job {job.job_id} was cancelled")
+            logger.info(f"Sync job {job.job_id} cancelled - cleaning up gracefully")
+            # State is already saved in database via update_sync_state calls
+            # No additional cleanup needed - re-raise to complete cancellation
             raise
+            
         except Exception as e:
             logger.error(f"Error syncing job {job.job_id}: {e}")
     
-    def _update_sync_state(self, job_id: str, message_id: int):
+    async def _update_sync_state(self, job_id: str, message_id: int):
         """Update sync state in database"""
-        db = SessionLocal()
-        try:
-            sync_state = db.query(SyncState).filter(
-                SyncState.job_id == job_id
-            ).first()
-            
-            if sync_state:
-                sync_state.last_message_id = message_id
-                sync_state.updated_at = datetime.utcnow()
-            else:
-                sync_state = SyncState(
-                    job_id=job_id,
-                    last_message_id=message_id
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(SyncState).filter(SyncState.job_id == job_id)
                 )
-                db.add(sync_state)
-            
-            db.commit()
-        finally:
-            db.close()
+                sync_state = result.scalar_one_or_none()
+                
+                if sync_state:
+                    sync_state.last_message_id = message_id
+                    sync_state.updated_at = datetime.utcnow()
+                else:
+                    sync_state = SyncState(
+                        job_id=job_id,
+                        last_message_id=message_id
+                    )
+                    db.add(sync_state)
+                
+                await db.commit()
+            except Exception as e:
+                logger.error(f"Error updating sync state: {e}")
+                await db.rollback()
     
     def add_job(self, job_id: str):
         """Add a job to active sync"""

@@ -54,7 +54,12 @@ class MultiAccountUploader:
                 continue
             
             try:
-                entity = await client.get_entity(int(target_channel))
+                # Convert channel ID to int, handling both numeric and username formats
+                try:
+                    entity = await client.get_entity(int(target_channel))
+                except ValueError:
+                    # Not a numeric ID, try as username
+                    entity = await client.get_entity(target_channel)
                 await client.send_file(
                     entity,
                     str(file_path),

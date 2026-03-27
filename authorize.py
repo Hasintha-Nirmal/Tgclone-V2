@@ -58,7 +58,9 @@ async def authorize():
         except Exception as e:
             if "Two-steps verification" in str(e) or "password" in str(e).lower():
                 print("\n🔐 2FA enabled - password required")
-                password = input("Enter your 2FA password: ").strip()
+                # Use getpass for secure password input
+                import getpass
+                password = getpass.getpass("Enter your 2FA password: ").strip()
                 await client.sign_in(password=password)
                 print("\n✓ Successfully authorized with 2FA!")
             else:

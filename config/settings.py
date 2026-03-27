@@ -66,8 +66,10 @@ class Settings(BaseSettings):
         if not v:
             # Generate random key if not provided
             generated_key = secrets.token_urlsafe(32)
-            print(f"WARNING: SECRET_KEY not set. Generated: {generated_key}")
-            print("Add this to your .env file: SECRET_KEY=" + generated_key)
+            # Import logger here to avoid circular dependency
+            import logging
+            logger = logging.getLogger("telegram_automation")
+            logger.warning("SECRET_KEY not set in .env - using generated key (not persistent)")
             return generated_key
         if len(v) < 16:
             raise ValueError("SECRET_KEY must be at least 16 characters")
@@ -94,6 +96,20 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_file: str = "./logs/app.log"
+    
+    # Timeouts
+    operation_timeout: int = 300  # 5 minutes
+    clone_timeout: int = 3600     # 1 hour
+    
+    # Security
+    force_https: bool = False
+    enable_hsts: bool = False
+    hsts_max_age: int = 31536000  # 1 year
+    auth_max_attempts: int = 5
+    auth_window_minutes: int = 15
+    
+    # Worker shutdown
+    worker_shutdown_timeout: int = 30
     
     class Config:
         env_file = ".env"

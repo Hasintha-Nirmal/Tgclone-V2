@@ -1,9 +1,10 @@
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from pathlib import Path
 from config.settings import settings
 from app.utils.logger import logger
+from datetime import datetime
 import asyncio
 
 class SessionManager:
@@ -11,6 +12,9 @@ class SessionManager:
         self.clients: Dict[str, TelegramClient] = {}
         self.session_dir = Path("sessions")
         self.session_dir.mkdir(exist_ok=True)
+        self.client_locks: Dict[str, asyncio.Lock] = {}
+        self.auth_cache: Dict[str, Tuple[bool, datetime]] = {}
+        self.cache_ttl = 60  # seconds
     
     async def create_client(
         self, 
@@ -52,16 +56,26 @@ class SessionManager:
         # If specific phone requested and exists, return it
         if phone and phone in self.clients:
             client = self.clients[phone]
-            if await client.is_user_authorized():
-                return client
+            try:
+                # Verify connection before returning
+                if not client.is_connected():
+                    await client.connect()
+                if await client.is_user_authorized():
+                    return client
+            except Exception as e:
+                logger.warning(f"Client {phone} connection check failed: {e}")
         
         # Return any authorized client
         for phone, client in self.clients.items():
             try:
+                # Verify connection before returning
+                if not client.is_connected():
+                    await client.connect()
                 if await client.is_user_authorized():
                     logger.info(f"Using authorized client: {phone}")
                     return client
-            except:
+            except Exception as e:
+                logger.warning(f"Client {phone} check failed: {e}")
                 continue
         
         # Try to create/use primary client from .env (if configured)
@@ -80,6 +94,20 @@ class SessionManager:
         
         # No clients available
         raise Exception("No authorized Telegram accounts available. Please login via the Accounts tab.")
+    
+    async def get_client_safe(self, phone: Optional[str] = None) -> TelegramClient:
+        """Thread-safe client retrieval with lock"""
+        if phone and phone in self.clients:
+            async with self.client_locks.setdefault(phone, asyncio.Lock()):
+                client = self.clients[phone]
+                if await client.is_user_authorized() and client.is_connected():
+                    return client
+        
+        # Fallback to any available client
+        available = await self.get_available_clients()
+        if not available:
+            raise Exception("No authorized Telegram accounts available. Please login via the Accounts tab.")
+        return available[0]
     
     async def initialize_all_accounts(self):
         """Initialize all configured accounts from .env (if any)"""
@@ -112,16 +140,28 @@ class SessionManager:
             except Exception as e:
                 logger.error(f"Failed to initialize account {phone}: {e}")
     
-    def get_available_clients(self) -> List[TelegramClient]:
+    async def get_available_clients(self) -> List[TelegramClient]:
         """Get list of all connected and authorized clients"""
         available = []
-        for client in self.clients.values():
+        for phone, client in self.clients.items():
             try:
-                # Note: This is synchronous check, may not be 100% accurate
-                # But it's good enough for listing purposes
-                available.append(client)
-            except:
-                continue
+                # Check cache first
+                if phone in self.auth_cache:
+                    is_auth, cached_at = self.auth_cache[phone]
+                    if (datetime.utcnow() - cached_at).seconds < self.cache_ttl:
+                        if is_auth and client.is_connected():
+                            available.append(client)
+                        continue
+                
+                # Verify authorization
+                is_auth = await client.is_user_authorized()
+                self.auth_cache[phone] = (is_auth, datetime.utcnow())
+                
+                if is_auth and client.is_connected():
+                    available.append(client)
+            except Exception as e:
+                logger.warning(f"Client check failed for {phone}: {e}")
+        
         return available
     
     async def disconnect_all(self):

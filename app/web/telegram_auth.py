@@ -193,24 +193,23 @@ class TelegramAuthManager:
             if phone in self.pending_auths:
                 try:
                     await self.pending_auths[phone]["client"].disconnect()
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error disconnecting pending auth client: {e}")
                 del self.pending_auths[phone]
             
             # Clear channels from database for this account
-            from app.utils.database import SessionLocal, Channel
-            db = SessionLocal()
-            try:
-                # Delete all channels (they were fetched with this account)
-                # We'll clear all channels since we don't track which account fetched which channel
-                deleted_count = db.query(Channel).delete()
-                db.commit()
-                logger.info(f"Deleted {deleted_count} channels from database after logout")
-            except Exception as e:
-                logger.error(f"Error deleting channels: {e}")
-                db.rollback()
-            finally:
-                db.close()
+            from app.utils.database import AsyncSessionLocal, Channel
+            from sqlalchemy import delete
+            async with AsyncSessionLocal() as db:
+                try:
+                    # Delete all channels (they were fetched with this account)
+                    # We'll clear all channels since we don't track which account fetched which channel
+                    result = await db.execute(delete(Channel))
+                    await db.commit()
+                    logger.info(f"Deleted {result.rowcount} channels from database after logout")
+                except Exception as e:
+                    logger.error(f"Error deleting channels: {e}")
+                    await db.rollback()
             
             logger.info(f"Successfully logged out {phone}")
             

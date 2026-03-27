@@ -1,7 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Index
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Index
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import QueuePool, StaticPool
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import QueuePool, StaticPool, NullPool
 from datetime import datetime
 from config.settings import settings
 
@@ -57,19 +57,30 @@ class Account(Base):
     is_active = Column(Boolean, default=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# Database setup with proper connection pooling
+class RateLimitEntry(Base):
+    __tablename__ = "rate_limit_entries"
+    
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    job_id = Column(String, nullable=True)
+    account_phone = Column(String, nullable=True)
+
+# Database setup with async engine and proper connection pooling
 if "sqlite" in settings.database_url:
-    # SQLite uses StaticPool for file-based databases
-    engine = create_engine(
-        settings.database_url,
+    # Convert SQLite URL to async format
+    async_url = settings.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    # SQLite uses NullPool for async operations to avoid connection issues
+    engine = create_async_engine(
+        async_url,
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+        poolclass=NullPool,
         echo=False
     )
 else:
-    # PostgreSQL uses QueuePool with optimized settings
-    engine = create_engine(
-        settings.database_url,
+    # PostgreSQL uses asyncpg driver
+    async_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
+    engine = create_async_engine(
+        async_url,
         poolclass=QueuePool,
         pool_size=10,              # Steady-state connections
         max_overflow=20,           # Burst capacity (total max = 30)
@@ -78,14 +89,27 @@ else:
         echo=False
     )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Create async session factory
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False
+)
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
+async def init_db():
+    """Initialize database tables asynchronously"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    """Async generator for database sessions"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()

@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from config.settings import settings
 from app.utils.logger import logger
+from app.utils.auth_rate_limiter import auth_rate_limiter
 from datetime import datetime
 import secrets
 
@@ -25,7 +26,22 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 def verify_credentials(credentials: HTTPBasicCredentials, request: Request = None) -> bool:
-    """Verify username and password with security logging"""
+    """Verify username and password with security logging and rate limiting"""
+    client_ip = get_client_ip(request) if request else "unknown"
+    
+    # Check rate limit before verifying credentials
+    allowed, wait_seconds = auth_rate_limiter.check_rate_limit(client_ip)
+    if not allowed:
+        logger.warning(
+            f"Rate limit exceeded for IP: {client_ip}, "
+            f"wait {wait_seconds} seconds"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many authentication attempts. Please wait {wait_seconds} seconds.",
+            headers={"Retry-After": str(wait_seconds)}
+        )
+    
     correct_username = secrets.compare_digest(
         credentials.username.encode("utf8"),
         settings.admin_username.encode("utf8")
@@ -37,21 +53,20 @@ def verify_credentials(credentials: HTTPBasicCredentials, request: Request = Non
     
     is_valid = correct_username and correct_password
     
-    # Security logging
-    client_ip = get_client_ip(request) if request else "unknown"
+    # Security logging (without credentials)
     timestamp = datetime.utcnow().isoformat()
     
     if not is_valid:
+        # Record failed attempt for rate limiting
+        auth_rate_limiter.record_attempt(client_ip)
         logger.warning(
             f"Failed authentication attempt - "
-            f"Username: {credentials.username}, "
             f"IP: {client_ip}, "
             f"Time: {timestamp}"
         )
     else:
         logger.info(
             f"Successful authentication - "
-            f"Username: {credentials.username}, "
             f"IP: {client_ip}, "
             f"Time: {timestamp}"
         )

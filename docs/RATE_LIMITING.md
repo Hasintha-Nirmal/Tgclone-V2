@@ -1,33 +1,61 @@
 # Rate Limiting & Account Protection
 
-The system includes multiple layers of protection to prevent your Telegram account from being banned or rate-limited.
+The system includes multiple layers of protection to prevent your Telegram account from being banned or rate-limited. Rate limiting is now **centralized and database-persisted**, ensuring consistent enforcement across all operations and application restarts.
 
 ## 🛡️ Protection Mechanisms
 
-### 1. Message Delays
+### 1. Centralized Rate Limiter
+- **Database-persisted**: Rate limit data survives application restarts
+- **Global coordination**: Manual clone jobs and auto-sync share the same rate limit
+- **Sliding window algorithm**: Tracks messages sent in the last hour
+- **Automatic cleanup**: Old entries are removed automatically
+
+### 2. Message Delays
 - **Text messages**: 1 second delay between each message
 - **Media messages**: 2 seconds delay between each message (media is more suspicious)
 - **Configurable**: Adjust in `.env` file
 
-### 2. Periodic Breaks
+### 3. Periodic Breaks
 - Takes a 5-second break every 10 messages
 - Prevents sustained high-speed activity
 - Makes the activity look more natural
 
-### 3. Hourly Rate Limit
+### 4. Hourly Rate Limit
 - Maximum 200 messages per hour (default)
 - Automatically pauses for 1 hour if limit is reached
 - Protects against detection algorithms
+- **Persists across restarts**: Rate limit tracking stored in database
 
-### 4. FloodWait Handling
+### 5. FloodWait Handling
 - Automatically detects Telegram's FloodWait errors
 - Switches to another account if available
 - Waits the required time before retrying
 
-### 5. Multi-Account Rotation
+### 6. Multi-Account Rotation
 - Distributes load across multiple accounts
 - Reduces risk per account
 - Automatic failover
+
+## 📊 How It Works
+
+### Centralized Rate Limiting System
+
+The system uses a **unified global rate limiter** with database persistence:
+
+1. **Message Tracking**: Every sent message is recorded in the database with a timestamp
+2. **Sliding Window**: The system counts messages sent in the last 60 minutes
+3. **Limit Enforcement**: If the hourly limit is reached, the system waits until the oldest message expires
+4. **Automatic Cleanup**: Entries older than 1 hour are automatically removed
+5. **Restart Resilience**: Rate limit data persists across application restarts
+
+### Coordination Across Jobs
+
+All cloning operations share the same rate limiter:
+- Manual clone jobs
+- Auto-sync operations
+- Multi-account uploads
+
+This ensures you never exceed the hourly limit, regardless of how many jobs are running simultaneously.
 
 ## ⚙️ Configuration
 
@@ -146,6 +174,19 @@ You'll see messages like:
 ```
 Processed 10 messages, taking a 5s break...
 Hourly rate limit reached (200 messages/hour). Waiting 3600 seconds...
+Rate limit: 150/200 messages in last hour
+```
+
+### Database Monitoring
+
+Rate limit data is stored in the `rate_limit_entries` table:
+
+```bash
+# Check current rate limit status
+sqlite3 data/app.db "SELECT COUNT(*) FROM rate_limit_entries WHERE timestamp > datetime('now', '-1 hour');"
+
+# View recent entries
+sqlite3 data/app.db "SELECT * FROM rate_limit_entries ORDER BY timestamp DESC LIMIT 10;"
 ```
 
 ## 🛠️ Troubleshooting
@@ -176,6 +217,8 @@ Hourly rate limit reached (200 messages/hour). Waiting 3600 seconds...
 - **Start conservative** and increase gradually
 - **Monitor your account** for any warnings
 - **Use auto-sync** for ongoing cloning (it's slower but safer)
+- **Rate limits persist** across application restarts - no burst traffic after restart
+- **All jobs coordinate** - manual and auto-sync jobs share the same rate limit
 
 ## 🎯 Recommended Strategy
 
@@ -186,6 +229,7 @@ For best results:
 3. **Multiple Accounts**: Add 2-3 accounts for load distribution
 4. **Monitor**: Check logs regularly for issues
 5. **Adjust**: Fine-tune settings based on your experience
+6. **Restart Safety**: Rate limits are maintained even after application restarts
 
 ---
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, delete
 from typing import List, Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
@@ -8,7 +9,7 @@ import uuid
 import re
 import asyncio
 
-from app.utils.database import get_db, SessionLocal, Channel, CloneJob, SyncState
+from app.utils.database import get_db, AsyncSessionLocal, Channel, CloneJob, SyncState
 from app.auth.session_manager import session_manager
 from app.scraper.channel_scraper import ChannelScraper
 from app.cloner.message_cloner import MessageCloner
@@ -16,6 +17,8 @@ from app.worker.sync_worker import sync_worker
 from app.utils.storage import storage_manager
 from app.utils.logger import logger
 from app.web.telegram_auth import telegram_auth_manager
+from app.utils.validators import validate_channel_id, validate_job_id
+from config.settings import settings
 
 # Routers
 auth_router = APIRouter()
@@ -28,14 +31,14 @@ accounts_router = APIRouter()
 @asynccontextmanager
 async def get_db_context():
     """Async context manager for database sessions"""
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+        except Exception:
+            await db.rollback()
+            raise
+        finally:
+            await db.close()
 
 # Models with validation
 class ChannelResponse(BaseModel):
@@ -123,7 +126,7 @@ class TelegramLogoutRequest(BaseModel):
 @auth_router.get("/status")
 async def auth_status():
     """Check authentication status"""
-    clients = session_manager.get_available_clients()
+    clients = await session_manager.get_available_clients()
     return {
         "authenticated": len(clients) > 0,
         "accounts": len(clients)
@@ -134,33 +137,43 @@ async def auth_status():
 async def list_channels(
     refresh: bool = False,
     search: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """List all channels"""
     try:
         # Check if any accounts are logged in
         if not session_manager.clients:
             # No accounts logged in - clear stale channels
-            db.query(Channel).delete()
-            db.commit()
+            try:
+                await db.execute(delete(Channel))
+                await db.commit()
+            except Exception as db_error:
+                logger.error(f"Error clearing channels: {db_error}")
+                await db.rollback()
             return []
         
         if refresh:
             client = await session_manager.get_client()
             scraper = ChannelScraper(client)
-            # Don't fetch member counts - it's slow and not critical
-            channels = await scraper.get_all_channels(save_to_db=True, fetch_member_count=False)
+            
+            # Fetch channels with timeout
+            channels = await asyncio.wait_for(
+                scraper.get_all_channels(save_to_db=True, fetch_member_count=False),
+                timeout=settings.operation_timeout
+            )
             return channels
         
         # Get from database
-        query = db.query(Channel)
+        query = select(Channel)
         if search:
             query = query.filter(
                 (Channel.title.contains(search)) | 
                 (Channel.username.contains(search))
             )
         
-        channels = query.all()
+        result = await db.execute(query)
+        channels = result.scalars().all()
         return [
             {
                 "channel_id": ch.channel_id,
@@ -171,35 +184,72 @@ async def list_channels(
             }
             for ch in channels
         ]
+    
+    except asyncio.TimeoutError:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Timeout listing channels from {client_ip}")
+        raise HTTPException(status_code=408, detail="Operation timed out")
     except Exception as e:
-        logger.error(f"Error listing channels: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error listing channels from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @channels_router.get("/{channel_id}")
-async def get_channel(channel_id: str):
+async def get_channel(channel_id: str, request: Request):
     """Get specific channel details"""
     try:
+        # Validate channel ID format
+        is_valid, error_msg = validate_channel_id(channel_id)
+        if not is_valid:
+            logger.warning(f"Invalid channel ID format from {request.client.host}: {channel_id}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Get channel with timeout
         client = await session_manager.get_client()
         scraper = ChannelScraper(client)
-        channel = await scraper.get_channel_by_id(channel_id)
+        
+        channel = await asyncio.wait_for(
+            scraper.get_channel_by_id(channel_id),
+            timeout=settings.operation_timeout
+        )
         
         if not channel:
             raise HTTPException(status_code=404, detail="Channel not found")
         
         return channel
+    
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout getting channel {channel_id} from {request.client.host}")
+        raise HTTPException(status_code=408, detail="Operation timed out")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting channel: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting channel {channel_id} from {request.client.host}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Job Routes
 @jobs_router.post("/clone", response_model=CloneJobResponse)
 async def create_clone_job(
     job_data: CloneJobCreate,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None
 ):
     """Create a new clone job with validation"""
     try:
+        # Additional validation beyond Pydantic
+        is_valid, error_msg = validate_channel_id(job_data.source_channel)
+        if not is_valid:
+            client_ip = request.client.host if request else "unknown"
+            logger.warning(f"Invalid source channel from {client_ip}: {job_data.source_channel}")
+            raise HTTPException(status_code=400, detail=f"Invalid source channel: {error_msg}")
+        
+        is_valid, error_msg = validate_channel_id(job_data.target_channel)
+        if not is_valid:
+            client_ip = request.client.host if request else "unknown"
+            logger.warning(f"Invalid target channel from {client_ip}: {job_data.target_channel}")
+            raise HTTPException(status_code=400, detail=f"Invalid target channel: {error_msg}")
+        
         job_id = str(uuid.uuid4())
         
         # Create job in database
@@ -212,8 +262,11 @@ async def create_clone_job(
             status="pending"
         )
         db.add(job)
-        db.commit()
-        db.refresh(job)
+        await db.commit()
+        await db.refresh(job)
+        
+        client_ip = request.client.host if request else "unknown"
+        logger.info(f"Clone job created: {job_id} from {client_ip}")
         
         # Start cloning in background
         background_tasks.add_task(
@@ -227,163 +280,290 @@ async def create_clone_job(
         )
         
         return job
+    
+    except HTTPException:
+        raise
     except ValueError as e:
         # Pydantic validation error
+        client_ip = request.client.host if request else "unknown"
+        logger.warning(f"Validation error from {client_ip}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error creating clone job: {e}")
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error creating clone job from {client_ip}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create job")
 
 @jobs_router.get("/list", response_model=List[CloneJobResponse])
 async def list_jobs(
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """List all clone jobs"""
-    query = db.query(CloneJob)
+    query = select(CloneJob)
     if status:
         query = query.filter(CloneJob.status == status)
     
-    jobs = query.order_by(CloneJob.created_at.desc()).all()
+    query = query.order_by(CloneJob.created_at.desc())
+    result = await db.execute(query)
+    jobs = result.scalars().all()
     return jobs
 
 @jobs_router.get("/{job_id}", response_model=CloneJobResponse)
-async def get_job(job_id: str, db: Session = Depends(get_db)):
+async def get_job(job_id: str, db: AsyncSession = Depends(get_db), request: Request = None):
     """Get job details"""
-    job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    try:
+        # Validate job ID format
+        is_valid, error_msg = validate_job_id(job_id)
+        if not is_valid:
+            client_ip = request.client.host if request else "unknown"
+            logger.warning(f"Invalid job ID from {client_ip}: {job_id}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        result = await db.execute(select(CloneJob).filter(CloneJob.job_id == job_id))
+        job = result.scalar_one_or_none()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return job
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error getting job {job_id} from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @jobs_router.post("/{job_id}/stop")
-async def stop_job(job_id: str, db: Session = Depends(get_db)):
+async def stop_job(job_id: str, db: AsyncSession = Depends(get_db), request: Request = None):
     """Stop a running job"""
-    job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        # Validate job ID format
+        is_valid, error_msg = validate_job_id(job_id)
+        if not is_valid:
+            client_ip = request.client.host if request else "unknown"
+            logger.warning(f"Invalid job ID from {client_ip}: {job_id}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        result = await db.execute(select(CloneJob).filter(CloneJob.job_id == job_id))
+        job = result.scalar_one_or_none()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        job.status = "stopped"
+        await db.commit()
+        
+        if job.auto_sync:
+            sync_worker.remove_job(job_id)
+        
+        client_ip = request.client.host if request else "unknown"
+        logger.info(f"Job {job_id} stopped by {client_ip}")
+        
+        return {"message": "Job stopped"}
     
-    job.status = "stopped"
-    db.commit()
-    
-    if job.auto_sync:
-        sync_worker.remove_job(job_id)
-    
-    return {"message": "Job stopped"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error stopping job {job_id} from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @jobs_router.delete("/{job_id}")
-async def delete_job(job_id: str, db: Session = Depends(get_db)):
+async def delete_job(job_id: str, db: AsyncSession = Depends(get_db), request: Request = None):
     """Delete a job"""
-    job = db.query(CloneJob).filter(CloneJob.job_id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        # Validate job ID format
+        is_valid, error_msg = validate_job_id(job_id)
+        if not is_valid:
+            client_ip = request.client.host if request else "unknown"
+            logger.warning(f"Invalid job ID from {client_ip}: {job_id}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        result = await db.execute(select(CloneJob).filter(CloneJob.job_id == job_id))
+        job = result.scalar_one_or_none()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        # Stop if running
+        if job.auto_sync:
+            sync_worker.remove_job(job_id)
+        
+        # Cleanup files
+        storage_manager.cleanup_job(job_id)
+        
+        # Delete from database
+        await db.delete(job)
+        await db.commit()
+        
+        client_ip = request.client.host if request else "unknown"
+        logger.info(f"Job {job_id} deleted by {client_ip}")
+        
+        return {"message": "Job deleted"}
     
-    # Stop if running
-    if job.auto_sync:
-        sync_worker.remove_job(job_id)
-    
-    # Cleanup files
-    storage_manager.cleanup_job(job_id)
-    
-    # Delete from database
-    db.delete(job)
-    db.commit()
-    
-    return {"message": "Job deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error deleting job {job_id} from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # System Routes
 @system_router.get("/stats")
-async def system_stats(db: Session = Depends(get_db)):
+async def system_stats(db: AsyncSession = Depends(get_db), request: Request = None):
     """Get system statistics"""
-    # Check if any accounts are logged in
-    if not session_manager.clients:
-        # No accounts - clear stale channels and return zeros
-        db.query(Channel).delete()
-        db.commit()
+    try:
+        # Check if any accounts are logged in
+        if not session_manager.clients:
+            # No accounts - clear stale channels and return zeros
+            try:
+                await db.execute(delete(Channel))
+                await db.commit()
+            except Exception as db_error:
+                logger.error(f"Error clearing channels in stats: {db_error}")
+                await db.rollback()
+            
+            total_channels = 0
+        else:
+            result = await db.execute(select(Channel))
+            total_channels = len(result.scalars().all())
         
-        total_channels = 0
-    else:
-        total_channels = db.query(Channel).count()
+        result = await db.execute(select(CloneJob))
+        total_jobs = len(result.scalars().all())
+        
+        result = await db.execute(
+            select(CloneJob).filter(CloneJob.status.in_(["running", "pending"]))
+        )
+        active_jobs = len(result.scalars().all())
+        
+        disk_usage = storage_manager.get_disk_usage()
+        
+        return {
+            "channels": total_channels,
+            "total_jobs": total_jobs,
+            "active_jobs": active_jobs,
+            "disk_usage": disk_usage
+        }
     
-    total_jobs = db.query(CloneJob).count()
-    active_jobs = db.query(CloneJob).filter(
-        CloneJob.status.in_(["running", "pending"])
-    ).count()
-    
-    disk_usage = storage_manager.get_disk_usage()
-    
-    return {
-        "channels": total_channels,
-        "total_jobs": total_jobs,
-        "active_jobs": active_jobs,
-        "disk_usage": disk_usage
-    }
+    except Exception as e:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error getting system stats from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @system_router.post("/cleanup")
-async def cleanup_storage():
+async def cleanup_storage(request: Request = None):
     """Cleanup old files"""
-    storage_manager.cleanup_old_files(max_age_hours=24)
-    return {"message": "Cleanup completed"}
+    try:
+        storage_manager.cleanup_old_files(max_age_hours=24)
+        
+        client_ip = request.client.host if request else "unknown"
+        logger.info(f"Storage cleanup initiated from {client_ip}")
+        
+        return {"message": "Cleanup completed"}
+    
+    except Exception as e:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error during cleanup from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Account Management Routes
 @accounts_router.get("/list")
-async def list_accounts():
+async def list_accounts(request: Request = None):
     """List all logged in accounts"""
     try:
         accounts = await telegram_auth_manager.get_logged_accounts()
         return {"accounts": accounts}
     except Exception as e:
-        logger.error(f"Error listing accounts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error listing accounts from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @accounts_router.post("/login/send-code")
-async def send_login_code(request: TelegramLoginRequest):
+async def send_login_code(request_data: TelegramLoginRequest, request: Request = None):
     """Send verification code to phone"""
     try:
-        result = await telegram_auth_manager.send_code(
-            request.phone,
-            request.api_id,
-            request.api_hash
+        result = await asyncio.wait_for(
+            telegram_auth_manager.send_code(
+                request_data.phone,
+                request_data.api_id,
+                request_data.api_hash
+            ),
+            timeout=settings.operation_timeout
         )
         return result
+    
+    except asyncio.TimeoutError:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Timeout sending code to {request_data.phone} from {client_ip}")
+        raise HTTPException(status_code=408, detail="Operation timed out")
     except Exception as e:
-        logger.error(f"Error sending code: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error sending code from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send verification code")
 
 @accounts_router.post("/login/verify-code")
-async def verify_login_code(request: TelegramCodeRequest):
+async def verify_login_code(request_data: TelegramCodeRequest, request: Request = None):
     """Verify the code and complete login"""
     try:
-        result = await telegram_auth_manager.verify_code(
-            request.phone,
-            request.code
+        result = await asyncio.wait_for(
+            telegram_auth_manager.verify_code(
+                request_data.phone,
+                request_data.code
+            ),
+            timeout=settings.operation_timeout
         )
         return result
+    
+    except asyncio.TimeoutError:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Timeout verifying code for {request_data.phone} from {client_ip}")
+        raise HTTPException(status_code=408, detail="Operation timed out")
     except Exception as e:
-        logger.error(f"Error verifying code: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error verifying code from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to verify code")
 
 @accounts_router.post("/login/verify-password")
-async def verify_2fa_password(request: TelegramPasswordRequest):
+async def verify_2fa_password(request_data: TelegramPasswordRequest, request: Request = None):
     """Verify 2FA password"""
     try:
-        result = await telegram_auth_manager.verify_password(
-            request.phone,
-            request.password
+        result = await asyncio.wait_for(
+            telegram_auth_manager.verify_password(
+                request_data.phone,
+                request_data.password
+            ),
+            timeout=settings.operation_timeout
         )
         return result
+    
+    except asyncio.TimeoutError:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Timeout verifying password for {request_data.phone} from {client_ip}")
+        raise HTTPException(status_code=408, detail="Operation timed out")
     except Exception as e:
-        logger.error(f"Error verifying password: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error verifying password from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to verify password")
 
 @accounts_router.post("/logout")
-async def logout_account(request: TelegramLogoutRequest):
+async def logout_account(request_data: TelegramLogoutRequest, request: Request = None):
     """Logout account and remove session"""
     try:
-        result = await telegram_auth_manager.logout_account(request.phone)
+        result = await asyncio.wait_for(
+            telegram_auth_manager.logout_account(request_data.phone),
+            timeout=settings.operation_timeout
+        )
+        
+        client_ip = request.client.host if request else "unknown"
+        logger.info(f"Account logged out from {client_ip}")
+        
         return result
+    
+    except asyncio.TimeoutError:
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Timeout logging out {request_data.phone} from {client_ip}")
+        raise HTTPException(status_code=408, detail="Operation timed out")
     except Exception as e:
-        logger.error(f"Error logging out: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        client_ip = request.client.host if request else "unknown"
+        logger.error(f"Error logging out from {client_ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to logout")
 
 # Background task with async context manager
 async def run_clone_job(
@@ -394,18 +574,19 @@ async def run_clone_job(
     limit: Optional[int],
     auto_sync: bool
 ):
-    """Run clone job in background with proper async context"""
+    """Run clone job in background with proper async context and timeout"""
     
     async with get_db_context() as db:
         try:
             # Update status to running
-            result = db.query(CloneJob).filter(
-                CloneJob.job_id == job_id,
-                CloneJob.status == "pending"
-            ).update({"status": "running"})
-            db.commit()
+            result = await db.execute(
+                update(CloneJob)
+                .filter(CloneJob.job_id == job_id, CloneJob.status == "pending")
+                .values(status="running")
+            )
+            await db.commit()
             
-            if result == 0:
+            if result.rowcount == 0:
                 logger.error(f"Job {job_id} not found or not in pending state")
                 return
             
@@ -413,31 +594,53 @@ async def run_clone_job(
             client = await session_manager.get_client()
             cloner = MessageCloner(client)
             
-            # Clone messages
+            # Clone messages with timeout
             processed = 0
-            async for result in cloner.clone_messages(
+            clone_operation = cloner.clone_messages(
                 source_channel,
                 target_channel,
                 start_id=start_message_id,
                 limit=limit,
                 job_id=job_id
-            ):
-                if result["status"] == "success":
-                    processed += 1
-                    # Atomic update
-                    db.query(CloneJob).filter(
-                        CloneJob.job_id == job_id
-                    ).update({"processed_messages": processed})
-                    db.commit()
+            )
+            
+            # Wrap the entire clone operation with timeout
+            try:
+                async for result in asyncio.wait_for(
+                    clone_operation,
+                    timeout=settings.clone_timeout
+                ):
+                    if result["status"] == "success":
+                        processed += 1
+                        # Atomic update
+                        await db.execute(
+                            update(CloneJob)
+                            .filter(CloneJob.job_id == job_id)
+                            .values(processed_messages=processed)
+                        )
+                        await db.commit()
+            
+            except asyncio.TimeoutError:
+                logger.error(f"Job {job_id} timed out after {settings.clone_timeout} seconds")
+                await db.execute(
+                    update(CloneJob)
+                    .filter(CloneJob.job_id == job_id)
+                    .values(
+                        status="failed",
+                        error_message=f"Operation timed out after {settings.clone_timeout} seconds",
+                        updated_at=datetime.utcnow()
+                    )
+                )
+                await db.commit()
+                return
             
             # Mark as completed
-            db.query(CloneJob).filter(
-                CloneJob.job_id == job_id
-            ).update({
-                "status": "completed",
-                "updated_at": datetime.utcnow()
-            })
-            db.commit()
+            await db.execute(
+                update(CloneJob)
+                .filter(CloneJob.job_id == job_id)
+                .values(status="completed", updated_at=datetime.utcnow())
+            )
+            await db.commit()
             
             # Add to sync worker if auto_sync
             if auto_sync:
@@ -448,22 +651,23 @@ async def run_clone_job(
             
         except asyncio.CancelledError:
             logger.warning(f"Job {job_id} was cancelled")
-            db.query(CloneJob).filter(
-                CloneJob.job_id == job_id
-            ).update({
-                "status": "paused",
-                "updated_at": datetime.utcnow()
-            })
-            db.commit()
+            await db.execute(
+                update(CloneJob)
+                .filter(CloneJob.job_id == job_id)
+                .values(status="paused", updated_at=datetime.utcnow())
+            )
+            await db.commit()
             raise
             
         except Exception as e:
-            logger.error(f"Job {job_id} failed: {e}")
-            db.query(CloneJob).filter(
-                CloneJob.job_id == job_id
-            ).update({
-                "status": "failed",
-                "error_message": str(e),
-                "updated_at": datetime.utcnow()
-            })
-            db.commit()
+            logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+            await db.execute(
+                update(CloneJob)
+                .filter(CloneJob.job_id == job_id)
+                .values(
+                    status="failed",
+                    error_message=str(e),
+                    updated_at=datetime.utcnow()
+                )
+            )
+            await db.commit()

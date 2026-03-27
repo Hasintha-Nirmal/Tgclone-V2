@@ -3,7 +3,8 @@ from telethon.tl.functions.channels import GetFullChannelRequest
 from telethon.tl.types import Channel, Chat
 from typing import List, Dict, Optional
 from app.utils.logger import logger
-from app.utils.database import Channel as ChannelModel, SessionLocal
+from app.utils.database import Channel as ChannelModel, AsyncSessionLocal
+from sqlalchemy import select
 
 class ChannelScraper:
     def __init__(self, client: TelegramClient):
@@ -25,7 +26,7 @@ class ChannelScraper:
                     channels.append(channel_info)
                     
                     if save_to_db:
-                        self._save_channel_to_db(channel_info)
+                        await self._save_channel_to_db(channel_info)
             
             logger.info(f"Found {len(channels)} channels")
             return channels
@@ -48,7 +49,8 @@ class ChannelScraper:
             try:
                 full_channel = await self.client(GetFullChannelRequest(channel))
                 member_count = full_channel.full_chat.participants_count
-            except:
+            except Exception as e:
+                logger.debug(f"Could not fetch member count: {e}")
                 member_count = None
         
         # Format channel ID to -100 format
@@ -65,35 +67,36 @@ class ChannelScraper:
             "access_hash": channel.access_hash
         }
     
-    def _save_channel_to_db(self, channel_info: Dict):
+    async def _save_channel_to_db(self, channel_info: Dict):
         """Save channel to database"""
-        db = SessionLocal()
-        try:
-            existing = db.query(ChannelModel).filter(
-                ChannelModel.channel_id == channel_info["channel_id"]
-            ).first()
-            
-            if existing:
-                existing.title = channel_info["title"]
-                existing.username = channel_info["username"]
-                existing.member_count = channel_info["member_count"]
-                existing.is_private = channel_info["is_private"]
-            else:
-                channel = ChannelModel(
-                    channel_id=channel_info["channel_id"],
-                    title=channel_info["title"],
-                    username=channel_info["username"],
-                    member_count=channel_info["member_count"],
-                    is_private=channel_info["is_private"]
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(ChannelModel).filter(
+                        ChannelModel.channel_id == channel_info["channel_id"]
+                    )
                 )
-                db.add(channel)
-            
-            db.commit()
-        except Exception as e:
-            logger.error(f"Error saving channel to DB: {e}")
-            db.rollback()
-        finally:
-            db.close()
+                existing = result.scalar_one_or_none()
+                
+                if existing:
+                    existing.title = channel_info["title"]
+                    existing.username = channel_info["username"]
+                    existing.member_count = channel_info["member_count"]
+                    existing.is_private = channel_info["is_private"]
+                else:
+                    channel = ChannelModel(
+                        channel_id=channel_info["channel_id"],
+                        title=channel_info["title"],
+                        username=channel_info["username"],
+                        member_count=channel_info["member_count"],
+                        is_private=channel_info["is_private"]
+                    )
+                    db.add(channel)
+                
+                await db.commit()
+            except Exception as e:
+                logger.error(f"Error saving channel to DB: {e}")
+                await db.rollback()
     
     async def search_channels(self, query: str) -> List[Dict]:
         """Search channels by name or username"""
@@ -109,7 +112,12 @@ class ChannelScraper:
     async def get_channel_by_id(self, channel_id: str) -> Optional[Dict]:
         """Get specific channel by ID"""
         try:
-            entity = await self.client.get_entity(int(channel_id))
+            # Convert channel ID to int, handling both numeric and username formats
+            try:
+                entity = await self.client.get_entity(int(channel_id))
+            except ValueError:
+                # Not a numeric ID, try as username
+                entity = await self.client.get_entity(channel_id)
             if isinstance(entity, Channel):
                 return await self._extract_channel_info(entity)
         except Exception as e:

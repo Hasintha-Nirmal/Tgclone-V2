@@ -42,6 +42,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**Note**: The system now uses async SQLAlchemy with `aiosqlite` for non-blocking database operations. This dependency is included in `requirements.txt`.
+
 ### Configure Environment
 
 ```bash
@@ -154,6 +156,22 @@ asyncio.run(auth())
 
 ## Step 5: Advanced Configuration
 
+### Database Configuration
+
+The system uses async SQLAlchemy with SQLite by default:
+
+```env
+# Default SQLite (async)
+DATABASE_URL=sqlite+aiosqlite:///./data/app.db
+
+# Optional: PostgreSQL (async)
+DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
+```
+
+**Important**: The database URL must use an async driver:
+- SQLite: `sqlite+aiosqlite://`
+- PostgreSQL: `postgresql+asyncpg://`
+
 ### Multi-Account Setup
 
 Add additional accounts in `.env`:
@@ -191,6 +209,19 @@ MAX_RETRIES=3
 
 # Flood wait multiplier
 FLOOD_WAIT_MULTIPLIER=1.5
+
+# Graceful shutdown timeout (seconds)
+WORKER_SHUTDOWN_TIMEOUT=30
+```
+
+### Timeout Configuration
+
+```env
+# Operation timeout in seconds (default: 300)
+OPERATION_TIMEOUT=300
+
+# Clone job timeout in seconds (default: 3600)
+CLONE_TIMEOUT=3600
 ```
 
 ## Troubleshooting

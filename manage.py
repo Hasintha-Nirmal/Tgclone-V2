@@ -115,8 +115,8 @@ def cmd_status(args):
     try:
         urllib.request.urlopen("http://localhost:8000/health", timeout=2)
         print("✓ Web interface: http://localhost:8000")
-    except:
-        print("✗ Web interface not accessible")
+    except Exception as e:
+        print(f"✗ Web interface not accessible: {e}")
     
     print("=" * 60)
 

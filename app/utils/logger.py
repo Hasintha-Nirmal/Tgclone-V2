@@ -7,6 +7,10 @@ def setup_logger(name: str = "telegram_automation") -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, settings.log_level.upper()))
     
+    # Prevent duplicate handlers if logger already configured
+    if logger.handlers:
+        return logger
+    
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)

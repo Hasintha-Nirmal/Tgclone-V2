@@ -13,8 +13,27 @@ A complete Python-based Telegram automation system for channel management, cloni
 - **Web Dashboard**: FastAPI-based UI for management
 - **Storage Optimized**: Auto-delete files after upload
 - **Docker Ready**: Full containerization support
+- **Centralized Rate Limiting**: Database-persisted rate limiting that survives restarts 🆕
+- **Authentication Protection**: Built-in rate limiting against brute force attacks 🆕
+- **Async Database**: Non-blocking database operations with async SQLAlchemy 🆕
+- **Graceful Shutdown**: Safe worker shutdown with state preservation 🆕
 
 ## Quick Start
+
+### Prerequisites
+
+- Python 3.11 or higher
+- Telegram account
+- API credentials from https://my.telegram.org
+
+### Dependencies
+
+Key dependencies (see `requirements.txt` for full list):
+- **FastAPI** (0.109.0): Web framework
+- **Telethon** (1.34.0): Telegram client library
+- **SQLAlchemy** (2.0.25): ORM with async support
+- **aiosqlite** (0.19.0): Async SQLite driver 🆕
+- **Uvicorn** (0.27.0): ASGI server
 
 ### Local Setup
 

@@ -60,7 +60,35 @@ ADMIN_PASSWORD=your_strong_password
 docker-compose restart telegram-automation
 ```
 
-### 2. Use HTTPS in Production
+### 2. Set SECRET_KEY in Production
+
+The SECRET_KEY is used for session encryption and security:
+
+```bash
+# Generate a secure key
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Add to .env
+SECRET_KEY=your_generated_key_here
+```
+
+**Important**: If SECRET_KEY is not set, the system generates one automatically, but it won't persist across restarts. Always set it in `.env` for production.
+
+### 3. Authentication Rate Limiting
+
+The system now includes built-in protection against brute force attacks:
+
+- **Limit**: 5 failed login attempts per IP address
+- **Window**: 15 minutes
+- **Response**: 429 Too Many Requests after limit exceeded
+- **Automatic**: No configuration needed
+
+Failed authentication attempts are logged (without exposing credentials):
+```
+Authentication attempt from 203.189.185.223 - Failed
+```
+
+### 4. Use HTTPS in Production
 
 For production deployment, use a reverse proxy with SSL:
 
@@ -83,7 +111,23 @@ server {
 }
 ```
 
-### 3. Restrict Network Access
+**Optional HTTPS Enforcement:**
+
+You can configure the application to enforce HTTPS:
+
+```env
+# .env configuration
+FORCE_HTTPS=true
+ENABLE_HSTS=true
+HSTS_MAX_AGE=31536000  # 1 year
+```
+
+When enabled, the system will:
+- Redirect HTTP requests to HTTPS
+- Add HSTS (HTTP Strict Transport Security) headers
+- Add security headers (X-Frame-Options, X-Content-Type-Options)
+
+### 5. Restrict Network Access
 
 **Docker Network Isolation:**
 ```yaml
@@ -103,7 +147,7 @@ sudo ufw allow from 192.168.1.100 to any port 8000
 ssh -L 8000:localhost:8000 user@server
 ```
 
-### 4. Secure Session Files
+### 6. Secure Session Files
 
 Session files contain your Telegram authentication:
 
@@ -115,7 +159,7 @@ chmod 600 sessions/*.session
 docker volume inspect playground_telegram-sessions
 ```
 
-### 5. Environment Variables
+### 7. Environment Variables
 
 Never commit `.env` to version control:
 
@@ -124,7 +168,7 @@ Never commit `.env` to version control:
 echo ".env" >> .gitignore
 ```
 
-### 6. Regular Updates
+### 8. Regular Updates
 
 Keep the system updated:
 
@@ -139,12 +183,29 @@ docker-compose up -d
 
 ## 🔐 Access Control
 
+### Authentication Rate Limiting
+
+The system automatically protects against brute force attacks:
+
+| Feature | Configuration | Default |
+|---------|--------------|---------|
+| Max Failed Attempts | `AUTH_MAX_ATTEMPTS` | 5 |
+| Time Window | `AUTH_WINDOW_MINUTES` | 15 minutes |
+| Lockout Response | HTTP 429 | Too Many Requests |
+
+After exceeding the limit, the IP address is temporarily blocked. The system will return:
+```json
+{
+  "detail": "Too many authentication attempts. Please try again in X seconds."
+}
+```
+
 ### Who Can Access What
 
 | Resource | Authentication | Notes |
 |----------|---------------|-------|
-| Web Dashboard | ✅ Required | HTTP Basic Auth |
-| API Endpoints | ✅ Required | Same credentials |
+| Web Dashboard | ✅ Required | HTTP Basic Auth + Rate Limited |
+| API Endpoints | ✅ Required | Same credentials + Rate Limited |
 | Health Check | ❌ Public | `/health` endpoint |
 | Telegram Sessions | 🔒 File System | Protected by OS permissions |
 
@@ -179,7 +240,9 @@ Before going to production:
 
 - [ ] Changed default admin username
 - [ ] Set strong admin password
+- [ ] Set SECRET_KEY in .env
 - [ ] Configured HTTPS/SSL
+- [ ] Enabled HTTPS enforcement (optional)
 - [ ] Restricted network access
 - [ ] Set proper file permissions
 - [ ] Reviewed firewall rules
@@ -187,6 +250,7 @@ Before going to production:
 - [ ] Set up backups
 - [ ] Documented access procedures
 - [ ] Tested authentication
+- [ ] Verified rate limiting works
 
 ## 🔍 Monitoring
 
@@ -194,18 +258,23 @@ Before going to production:
 
 ```bash
 # Docker
-docker-compose logs telegram-automation | grep "401\|403"
+docker-compose logs telegram-automation | grep "401\|403\|429"
 
 # Look for failed auth attempts
-docker-compose logs telegram-automation | grep "Invalid credentials"
+docker-compose logs telegram-automation | grep "Authentication attempt"
+
+# Check rate limit blocks
+docker-compose logs telegram-automation | grep "Too many authentication attempts"
 ```
 
 ### Failed Login Attempts
 
-The system logs all authentication attempts:
+The system logs all authentication attempts without exposing credentials:
 
 ```
-INFO: 203.189.185.223:1700 - "GET / HTTP/1.1" 401 Unauthorized
+INFO: Authentication attempt from 203.189.185.223 - Failed
+INFO: Authentication attempt from 203.189.185.223 - Success
+WARNING: Too many authentication attempts from 203.189.185.223
 ```
 
 ## 🛠️ Troubleshooting
@@ -253,19 +322,26 @@ docker-compose restart telegram-automation
 
 ## 📝 Additional Security Measures
 
-### 1. Rate Limiting (Future Enhancement)
+### 1. Authentication Rate Limiting (✅ Implemented)
 
-Consider adding rate limiting for login attempts:
-- Max 5 attempts per IP per minute
-- Temporary IP ban after 10 failed attempts
+The system now includes built-in rate limiting for login attempts:
+- Max 5 attempts per IP per 15 minutes
+- Automatic IP-based blocking after limit exceeded
+- Configurable via `AUTH_MAX_ATTEMPTS` and `AUTH_WINDOW_MINUTES`
 
-### 2. Two-Factor Authentication (Future Enhancement)
+### 2. Secure Credential Handling (✅ Implemented)
+
+- Credentials are never logged in plaintext
+- SECRET_KEY is not printed to console
+- Authentication logs only include IP addresses and success/failure status
+
+### 3. Two-Factor Authentication (Future Enhancement)
 
 For high-security environments:
 - TOTP (Time-based One-Time Password)
 - Hardware keys (YubiKey)
 
-### 3. Audit Logging
+### 4. Audit Logging
 
 Enable detailed logging:
 
@@ -273,7 +349,7 @@ Enable detailed logging:
 LOG_LEVEL=DEBUG
 ```
 
-### 4. Regular Security Audits
+### 5. Regular Security Audits
 
 - Review access logs weekly
 - Check for unauthorized access attempts
