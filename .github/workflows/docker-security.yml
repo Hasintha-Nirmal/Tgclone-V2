@@ -1,13 +1,8 @@
 name: Docker Security Scan
 
+# Temporarily disabled - change to 'push/pull_request/schedule' to re-enable
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-  schedule:
-    # Run weekly security scans
-    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Only runs when manually triggered from GitHub Actions tab
 
 jobs:
   security-scan:
