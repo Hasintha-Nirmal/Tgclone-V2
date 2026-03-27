@@ -1,3 +1,4 @@
+# Python cache
 __pycache__
 *.pyc
 *.pyo
@@ -8,15 +9,74 @@ __pycache__
 *.egg-info
 dist
 build
+
+# Virtual environments
 .env
 .venv
 venv/
 ENV/
+env/
+
+# Runtime data (don't copy to image)
 sessions/*.session
+sessions/*.session-journal
 logs/*.log
 downloads/*
 data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Git
 .git
 .gitignore
+.gitattributes
+
+# Documentation
 README.md
+docs/
+*.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Docker
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Testing
+tests/
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Kiro IDE
+.kiro/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

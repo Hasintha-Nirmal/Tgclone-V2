@@ -1,0 +1,58 @@
+version: '3.8'
+
+# Development override configuration
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  telegram-automation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    # Development-specific settings
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    # Mount source code for hot-reload (if using --reload)
+    volumes:
+      - ./app:/app/app:ro
+      - ./config:/app/config:ro
+      - ./sessions:/app/sessions
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - telegram-downloads:/app/downloads
+    # Remove resource limits for development
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+    # Disable read-only for easier debugging
+    read_only: false
+    # Development command with auto-reload
+    command: ["uvicorn", "app.web.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # Expose additional ports for debugging
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # debugpy port
+
+  redis:
+    profiles: []  # Always start in dev mode
+    ports:
+      - "6379:6379"
+    # Redis CLI access
+    command: redis-server --appendonly yes
+
+  postgres:
+    profiles: []  # Always start in dev mode
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=telegram_automation_dev
+      - POSTGRES_USER=dev
+      - POSTGRES_PASSWORD=devpassword
+
+volumes:
+  telegram-downloads:
+  redis-data:
+  postgres-data:

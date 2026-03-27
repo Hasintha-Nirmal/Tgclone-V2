@@ -406,6 +406,24 @@ async def delete_job(job_id: str, db: AsyncSession = Depends(get_db), request: R
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # System Routes
+@system_router.get("/health")
+async def health_check():
+    """Health check endpoint for Docker and load balancers"""
+    try:
+        # Check if session manager is initialized
+        if not hasattr(session_manager, 'clients'):
+            return {"status": "unhealthy", "reason": "Session manager not initialized"}
+        
+        # Basic health check - service is running
+        return {
+            "status": "healthy",
+            "service": "telegram-automation",
+            "accounts": len(session_manager.clients) if session_manager.clients else 0
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "unhealthy", "reason": str(e)}
+
 @system_router.get("/stats")
 async def system_stats(db: AsyncSession = Depends(get_db), request: Request = None):
     """Get system statistics"""

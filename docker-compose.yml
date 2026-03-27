@@ -2,32 +2,62 @@ version: '3.8'
 
 services:
   telegram-automation:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
     container_name: telegram-automation
     ports:
       - "8000:8000"
     volumes:
-      # Persistent storage
+      # Persistent storage with proper permissions
       - ./sessions:/app/sessions
       - ./logs:/app/logs
       - ./data:/app/data
-      # Temporary storage (not persisted)
+      # Temporary storage (named volume for better performance)
       - telegram-downloads:/app/downloads
     environment:
       - TELEGRAM_API_ID=${TELEGRAM_API_ID}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
-      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE:-}
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - AUTO_DELETE_FILES=true
+      - AUTO_DELETE_FILES=${AUTO_DELETE_FILES:-true}
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:///./data/app.db}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
     networks:
       - telegram-net
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/system/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Read-only root filesystem (except for writable volumes)
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M,mode=1777
+    # User mapping (run as non-root)
+    user: "1000:1000"
 
   # Optional: Redis for queue system
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: telegram-redis
     ports:
       - "6379:6379"
@@ -38,15 +68,47 @@ services:
       - telegram-net
     profiles:
       - with-redis
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=50M,mode=1777
+    # Run as non-root
+    user: "999:999"
+    # Redis configuration for production
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
 
   # Optional: PostgreSQL instead of SQLite
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: telegram-postgres
     environment:
-      - POSTGRES_DB=telegram_automation
-      - POSTGRES_USER=telegram
-      - POSTGRES_PASSWORD=changeme
+      - POSTGRES_DB=${POSTGRES_DB:-telegram_automation}
+      - POSTGRES_USER=${POSTGRES_USER:-telegram}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
@@ -56,12 +118,52 @@ services:
       - telegram-net
     profiles:
       - with-postgres
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-telegram} -d ${POSTGRES_DB:-telegram_automation}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # PostgreSQL tuning for production
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c max_connections=100
+      -c effective_cache_size=512MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=2621kB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
 
 volumes:
-  telegram-downloads:  # Temporary, not persisted
+  telegram-downloads:
+    driver: local
   redis-data:
+    driver: local
   postgres-data:
+    driver: local
 
 networks:
   telegram-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

@@ -1,0 +1,64 @@
+name: Docker Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly security scans
+    - cron: '0 0 * * 0'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Build Docker image
+      run: docker build -t telegram-automation:test .
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'telegram-automation:test'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+    
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Run Hadolint (Dockerfile linter)
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: Dockerfile
+        failure-threshold: warning
+    
+    - name: Check for secrets in image
+      run: |
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          aquasec/trivy image --severity HIGH,CRITICAL \
+          --scanners secret telegram-automation:test
+
+  docker-bench:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Run Docker Bench Security
+      run: |
+        docker run --rm --net host --pid host --userns host --cap-add audit_control \
+          -e DOCKER_CONTENT_TRUST=$DOCKER_CONTENT_TRUST \
+          -v /var/lib:/var/lib \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v /usr/lib/systemd:/usr/lib/systemd \
+          -v /etc:/etc --label docker_bench_security \
+          docker/docker-bench-security || true
