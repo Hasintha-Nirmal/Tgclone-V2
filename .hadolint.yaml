@@ -1,0 +1,6 @@
+ignored:
+  - DL3008  # Pin versions in apt get install (impractical for system packages)
+  - DL3009  # Delete the apt-get lists after installing (already handled with rm -rf)
+
+# Optionally set failure threshold
+failure-threshold: error  # Only fail on errors, not warnings
