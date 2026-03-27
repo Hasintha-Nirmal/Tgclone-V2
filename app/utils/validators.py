@@ -1,9 +1,9 @@
 """Input validation utilities for API endpoints"""
 import re
-from typing import Optional
+from typing import Optional, Tuple
 
 
-def validate_channel_id(channel_id: str) -> tuple[bool, Optional[str]]:
+def validate_channel_id(channel_id: str) -> Tuple[bool, Optional[str]]:
     """
     Validate channel ID format.
     
@@ -30,7 +30,7 @@ def validate_channel_id(channel_id: str) -> tuple[bool, Optional[str]]:
     return False, "Channel ID must be numeric (e.g., -1001234567890) or username (e.g., @username)"
 
 
-def validate_job_id(job_id: str) -> tuple[bool, Optional[str]]:
+def validate_job_id(job_id: str) -> Tuple[bool, Optional[str]]:
     """
     Validate job ID format (UUID).
     

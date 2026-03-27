@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   telegram-automation:
     build:
@@ -16,6 +14,9 @@ services:
       - ./data:/app/data
       # Temporary storage (named volume for better performance)
       - telegram-downloads:/app/downloads
+    # Fix permission issues on Windows/Linux
+    tmpfs:
+      - /tmp:size=100M,mode=1777
     environment:
       - TELEGRAM_API_ID=${TELEGRAM_API_ID}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
@@ -50,8 +51,6 @@ services:
       - no-new-privileges:true
     # Read-only root filesystem (except for writable volumes)
     read_only: true
-    tmpfs:
-      - /tmp:size=100M,mode=1777
     # User mapping (run as non-root)
     user: "1000:1000"
 

@@ -48,7 +48,8 @@ COPY --chown=appuser:appuser . .
 
 # Create necessary directories with proper permissions
 RUN mkdir -p sessions logs downloads data && \
-    chown -R appuser:appuser sessions logs downloads data
+    chown -R appuser:appuser /app && \
+    chmod -R 755 sessions logs downloads data
 
 # Switch to non-root user
 USER appuser
