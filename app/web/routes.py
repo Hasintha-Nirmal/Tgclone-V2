@@ -612,7 +612,7 @@ async def run_clone_job(
             client = await session_manager.get_client()
             cloner = MessageCloner(client)
             
-            # Clone messages with timeout
+            # Clone messages
             processed = 0
             clone_operation = cloner.clone_messages(
                 source_channel,
@@ -622,12 +622,9 @@ async def run_clone_job(
                 job_id=job_id
             )
             
-            # Wrap the entire clone operation with timeout
+            # Iterate through clone results
             try:
-                async for result in asyncio.wait_for(
-                    clone_operation,
-                    timeout=settings.clone_timeout
-                ):
+                async for result in clone_operation:
                     if result["status"] == "success":
                         processed += 1
                         # Atomic update
@@ -637,15 +634,17 @@ async def run_clone_job(
                             .values(processed_messages=processed)
                         )
                         await db.commit()
+                    elif result["status"] == "error":
+                        logger.warning(f"Message {result.get('message_id')} failed: {result.get('error')}")
             
-            except asyncio.TimeoutError:
-                logger.error(f"Job {job_id} timed out after {settings.clone_timeout} seconds")
+            except Exception as e:
+                logger.error(f"Job {job_id} failed with error: {e}")
                 await db.execute(
                     update(CloneJob)
                     .filter(CloneJob.job_id == job_id)
                     .values(
                         status="failed",
-                        error_message=f"Operation timed out after {settings.clone_timeout} seconds",
+                        error_message=str(e),
                         updated_at=datetime.utcnow()
                     )
                 )
