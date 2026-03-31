@@ -88,20 +88,20 @@ cp .env.example .env
 nano .env
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
 
 ### With Redis (Optional)
 
 ```bash
 # Start with Redis
-docker-compose --profile with-redis up -d
+docker compose --profile with-redis up -d
 ```
 
 ### With PostgreSQL (Optional)
@@ -111,7 +111,7 @@ docker-compose --profile with-redis up -d
 DATABASE_URL=postgresql://telegram:changeme@postgres:5432/telegram_automation
 
 # Start with PostgreSQL
-docker-compose --profile with-postgres up -d
+docker compose --profile with-postgres up -d
 ```
 
 ## Step 4: First Time Setup
@@ -329,5 +329,5 @@ tar -czf backup-$(date +%Y%m%d).tar.gz sessions/ data/ .env
 
 For issues and questions:
 1. Check logs: `tail -f logs/app.log`
-2. Check Docker logs: `docker-compose logs -f`
+2. Check Docker logs: `docker compose logs -f`
 3. Review API docs: http://localhost:8000/docs

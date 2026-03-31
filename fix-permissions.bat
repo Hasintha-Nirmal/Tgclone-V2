@@ -15,8 +15,8 @@ echo Note: On Windows, Docker Desktop handles permissions automatically.
 echo If you still have permission issues, try:
 echo 1. Restart Docker Desktop
 echo 2. In Docker Desktop settings, ensure the drive is shared
-echo 3. Run: docker-compose down -v
+echo 3. Run: docker compose down -v
 echo 4. Delete logs, sessions, data folders
-echo 5. Run: docker-compose up -d
+echo 5. Run: docker compose up -d
 echo.
 pause

@@ -42,7 +42,7 @@ HEALTHCHECK --interval=30s --timeout=10s \
 ENTRYPOINT ["/usr/bin/tini", "--"]
 ```
 
-### 2. docker-compose.yml Enhancement
+### 2. docker compose.yml Enhancement
 
 #### Before:
 - Basic service definitions
@@ -87,7 +87,7 @@ user: "1000:1000"
 
 ### 3. New Configuration Files
 
-#### docker-compose.dev.yml
+#### docker compose.dev.yml
 Development-specific overrides:
 - Hot reload support
 - Debug logging
@@ -96,7 +96,7 @@ Development-specific overrides:
 - Always-on optional services
 - Increased resource limits
 
-#### docker-compose.prod.yml
+#### docker compose.prod.yml
 Production-specific overrides:
 - **Nginx reverse proxy** with SSL/TLS support
 - Strict resource limits
@@ -352,7 +352,7 @@ make clean
 
 2. **Stop current containers**:
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
 3. **Pull latest changes**:
@@ -424,7 +424,7 @@ make stats
 docker images telegram-automation
 
 # Test startup time
-time docker-compose up -d
+time docker compose up -d
 ```
 
 ### 3. Health Testing

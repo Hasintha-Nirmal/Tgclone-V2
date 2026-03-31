@@ -68,7 +68,7 @@ http://localhost:8000
 
 ```bash
 # Start the system
-docker-compose up -d
+docker compose up -d
 
 # Authorize your Telegram account (REQUIRED on first run)
 # Windows:
@@ -151,7 +151,7 @@ Password: changeme123
 ```bash
 ADMIN_USERNAME=your_username
 ADMIN_PASSWORD=your_strong_password
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 See [SECURITY.md](docs/SECURITY.md) for complete security guide.

@@ -315,7 +315,7 @@
 ```
 1. SETUP
    │
-   ├─→ docker-compose up -d
+   ├─→ docker compose up -d
    │
    ▼
 2. AUTHORIZE

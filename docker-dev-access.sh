@@ -22,7 +22,7 @@ fi
 case "$1" in
     logs)
         echo "Tailing application logs..."
-        docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f telegram-automation
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f telegram-automation
         ;;
     data)
         echo "Accessing database volume..."

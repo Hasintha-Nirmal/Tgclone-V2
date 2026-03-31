@@ -164,7 +164,7 @@ Check logs for rate limiting activity:
 
 ```bash
 # Docker
-docker-compose logs -f telegram-automation | grep "rate limit"
+docker compose logs -f telegram-automation | grep "rate limit"
 
 # Local
 tail -f logs/app.log | grep "rate limit"

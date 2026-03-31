@@ -10,7 +10,7 @@ PermissionError: [Errno 13] Permission denied: '/app/logs/app.log'
 
 ### Step 1: Stop Everything
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Step 2: Fix Permissions
@@ -18,7 +18,7 @@ docker-compose down
 **On Windows:**
 ```bash
 # Just run this - Docker Desktop handles the rest
-docker-compose up -d
+docker compose up -d
 ```
 
 **On Linux/Mac:**
@@ -28,13 +28,13 @@ chmod +x fix-permissions.sh
 ./fix-permissions.sh
 
 # Then start
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Step 3: Verify It's Working
 ```bash
 # Watch the logs
-docker-compose logs -f telegram-automation
+docker compose logs -f telegram-automation
 
 # You should see:
 # ✅ "Starting Telegram Automation System..."
@@ -63,15 +63,15 @@ Login with:
 ### Windows Users
 1. Restart Docker Desktop
 2. Delete `logs`, `sessions`, `data` folders
-3. Run `docker-compose up -d` again
+3. Run `docker compose up -d` again
 
 ### Linux/Mac Users
 ```bash
 # Nuclear option - clean everything
-docker-compose down -v
+docker compose down -v
 rm -rf logs sessions data downloads
 ./fix-permissions.sh
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Check Container Status
@@ -80,7 +80,7 @@ docker-compose up -d
 docker ps
 
 # What's in the logs?
-docker-compose logs --tail=50 telegram-automation
+docker compose logs --tail=50 telegram-automation
 
 # Get inside the container
 docker exec -it telegram-automation bash

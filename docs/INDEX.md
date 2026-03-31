@@ -96,7 +96,7 @@ Welcome to the Telegram Automation System documentation! Here's where to find ev
 
 ```bash
 # Start system
-docker-compose up -d
+docker compose up -d
 
 # Authorize
 python manage.py authorize --docker
@@ -173,7 +173,7 @@ downloads/    - Temporary media (auto-cleaned)
 ### Docker
 - [../README.md](../README.md) - Docker setup
 - [SETUP.md](SETUP.md) - Docker section
-- `../docker-compose.yml` - Configuration
+- `../docker compose.yml` - Configuration
 
 ### Features
 - [FEATURES.md](FEATURES.md) - Complete list

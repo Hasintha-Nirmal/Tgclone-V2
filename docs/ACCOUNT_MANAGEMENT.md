@@ -230,7 +230,7 @@ If an account is not shown:
 - Refresh the page
 - Check browser console for errors
 - Restart the container
-- Check logs: `docker-compose logs`
+- Check logs: `docker compose logs`
 
 ### Can't Logout
 
@@ -242,7 +242,7 @@ If an account is not shown:
 - Manually delete session file:
   ```bash
   rm sessions/PHONE_NUMBER.session
-  docker-compose restart
+  docker compose restart
   ```
 
 ## 💡 Tips & Tricks

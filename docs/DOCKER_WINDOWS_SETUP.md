@@ -6,7 +6,7 @@ When running Docker on Windows, you may encounter permission issues with mounted
 
 ## Development Mode Solution
 
-The `docker-compose.dev.yml` configuration uses **named volumes** instead of bind mounts for `logs` and `data` directories to avoid permission issues:
+The `docker compose.dev.yml` configuration uses **named volumes** instead of bind mounts for `logs` and `data` directories to avoid permission issues:
 
 ```yaml
 volumes:
@@ -100,12 +100,12 @@ For production deployment, you can use bind mounts with proper permissions:
 
 **Development mode (with hot-reload):**
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+docker compose -f docker compose.yml -f docker compose.dev.yml up
 ```
 
 **Production mode:**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Troubleshooting
@@ -113,9 +113,9 @@ docker-compose up -d
 ### "Permission denied" errors
 
 If you see permission errors:
-1. Stop containers: `docker-compose down`
+1. Stop containers: `docker compose down`
 2. Remove volumes: `docker volume rm tgcloner-v2_dev-data tgcloner-v2_dev-logs`
-3. Restart: `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up`
+3. Restart: `docker compose -f docker compose.yml -f docker compose.dev.yml up`
 
 ### "Database is locked" errors
 
@@ -126,7 +126,7 @@ SQLite on Windows bind mounts can have locking issues. Solution:
 ### Viewing real-time logs
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f
+docker compose -f docker compose.yml -f docker compose.dev.yml logs -f
 ```
 
 ### Accessing container shell

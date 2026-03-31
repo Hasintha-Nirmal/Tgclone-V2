@@ -92,7 +92,7 @@ Works with private/restricted channels! Just make sure:
 
 Check logs:
 ```bash
-docker-compose logs -f telegram-automation
+docker compose logs -f telegram-automation
 ```
 
 ### Need to re-authorize?
@@ -100,7 +100,7 @@ docker-compose logs -f telegram-automation
 Delete session and try again:
 ```bash
 docker exec telegram-automation rm sessions/*.session
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ./docker-authorize.sh
 ```
 
@@ -109,7 +109,7 @@ docker-compose restart telegram-automation
 Edit `.env` file and restart:
 ```bash
 nano .env  # or use any text editor
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ## Advanced Features
@@ -158,7 +158,7 @@ Use it to:
 
 1. Check [AUTHORIZATION.md](AUTHORIZATION.md) for auth issues
 2. Check [SETUP.md](SETUP.md) for detailed setup
-3. View logs: `docker-compose logs -f`
+3. View logs: `docker compose logs -f`
 4. API docs: http://localhost:8000/docs
 
 ## Your Next Steps

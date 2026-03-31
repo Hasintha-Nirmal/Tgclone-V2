@@ -24,7 +24,7 @@ ADMIN_PASSWORD=your_strong_password
 
 Then restart:
 ```bash
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ### Password Requirements
@@ -57,7 +57,7 @@ ADMIN_USERNAME=your_custom_username
 ADMIN_PASSWORD=your_strong_password
 
 # Restart
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ### 2. Set SECRET_KEY in Production
@@ -131,7 +131,7 @@ When enabled, the system will:
 
 **Docker Network Isolation:**
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   telegram-automation:
     ports:
@@ -177,8 +177,8 @@ Keep the system updated:
 git pull
 
 # Rebuild containers
-docker-compose build --no-cache
-docker-compose up -d
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ## 🔐 Access Control
@@ -258,13 +258,13 @@ Before going to production:
 
 ```bash
 # Docker
-docker-compose logs telegram-automation | grep "401\|403\|429"
+docker compose logs telegram-automation | grep "401\|403\|429"
 
 # Look for failed auth attempts
-docker-compose logs telegram-automation | grep "Authentication attempt"
+docker compose logs telegram-automation | grep "Authentication attempt"
 
 # Check rate limit blocks
-docker-compose logs telegram-automation | grep "Too many authentication attempts"
+docker compose logs telegram-automation | grep "Too many authentication attempts"
 ```
 
 ### Failed Login Attempts
@@ -301,7 +301,7 @@ nano .env
 ADMIN_PASSWORD=new_password
 
 # Restart
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ### Locked Out
@@ -317,7 +317,7 @@ vi .env
 
 # Exit and restart
 exit
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ## 📝 Additional Security Measures
@@ -383,9 +383,9 @@ If you suspect unauthorized access:
 ## 📞 Security Contacts
 
 For security issues:
-- Review logs: `docker-compose logs -f`
+- Review logs: `docker compose logs -f`
 - Check documentation: This file
-- Update system: `git pull && docker-compose up -d --build`
+- Update system: `git pull && docker compose up -d --build`
 
 ---
 

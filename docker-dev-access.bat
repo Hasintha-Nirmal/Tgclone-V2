@@ -19,7 +19,7 @@ if "%1"=="" (
 
 if "%1"=="logs" (
     echo Tailing application logs...
-    docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f telegram-automation
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f telegram-automation
     exit /b 0
 )
 

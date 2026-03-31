@@ -42,7 +42,7 @@ python authorize.py
 4. **Exit and restart:**
 ```bash
 exit
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ## Quick Fix (Local Installation)
@@ -139,7 +139,7 @@ TELEGRAM_PHONE_2=+1234567890
 Check the logs:
 ```bash
 # Docker
-docker-compose logs -f telegram-automation
+docker compose logs -f telegram-automation
 
 # Local
 tail -f logs/app.log

@@ -45,7 +45,7 @@ telegram-automation/
 │
 ├── Docker (4 files)
 │   ├── Dockerfile                       # Container image
-│   ├── docker-compose.yml               # Orchestration
+│   ├── docker compose.yml               # Orchestration
 │   ├── .dockerignore                    # Build exclusions
 │   └── downloads/.gitkeep               # Temp directory
 │
@@ -95,7 +95,7 @@ telegram-automation/
 
 ### ✓ Docker Support (Complete)
 - Production-ready Dockerfile
-- docker-compose.yml with optional services
+- docker compose.yml with optional services
 - Persistent volumes for sessions/logs
 - Temporary storage for downloads
 - Redis and PostgreSQL profiles
@@ -241,7 +241,7 @@ python main.py
 
 ### 2. Docker (Recommended)
 ```bash
-docker-compose up -d
+docker compose up -d
 ./docker-authorize.sh
 ```
 
@@ -253,7 +253,7 @@ docker-compose up -d
 
 ### 4. Production (Docker + Nginx)
 ```bash
-# docker-compose up -d
+# docker compose up -d
 # Configure Nginx reverse proxy
 ```
 
@@ -361,7 +361,7 @@ docker-compose up -d
 
 2. **Deploy:**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ./docker-authorize.sh
    ```
 

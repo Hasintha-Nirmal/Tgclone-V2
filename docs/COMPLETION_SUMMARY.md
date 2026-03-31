@@ -25,7 +25,7 @@ A complete, production-ready Python-based Telegram automation system with 40 fil
 
 ### ✅ Docker Support (4 files)
 - Production-ready Dockerfile
-- docker-compose.yml with optional services
+- docker compose.yml with optional services
 - Persistent volumes configuration
 - Network isolation
 
@@ -91,7 +91,7 @@ A complete, production-ready Python-based Telegram automation system with 40 fil
 
 ### Docker Support ✓
 - [x] Full containerization
-- [x] docker-compose setup
+- [x] docker compose setup
 - [x] Persistent volumes
 - [x] Temporary storage (auto-clean)
 - [x] Optional Redis/PostgreSQL
@@ -140,7 +140,7 @@ A complete, production-ready Python-based Telegram automation system with 40 fil
 
 ### 1. Docker (Recommended)
 ```bash
-docker-compose up -d
+docker compose up -d
 python manage.py authorize --docker
 ```
 
@@ -245,7 +245,7 @@ python main.py
 
 ### Infrastructure
 - ✓ Docker configuration
-- ✓ docker-compose setup
+- ✓ docker compose setup
 - ✓ Volume management
 - ✓ Network configuration
 - ✓ Service orchestration

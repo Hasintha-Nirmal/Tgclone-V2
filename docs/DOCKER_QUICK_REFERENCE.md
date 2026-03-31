@@ -33,9 +33,9 @@ make up
 
 | File | Purpose |
 |------|---------|
-| `docker-compose.yml` | Base configuration |
-| `docker-compose.dev.yml` | Development overrides |
-| `docker-compose.prod.yml` | Production overrides |
+| `docker compose.yml` | Base configuration |
+| `docker compose.dev.yml` | Development overrides |
+| `docker compose.prod.yml` | Production overrides |
 | `Dockerfile` | Multi-stage build |
 | `.dockerignore` | Build context exclusions |
 | `nginx/nginx.conf` | Reverse proxy config |
@@ -44,7 +44,7 @@ make up
 
 ```bash
 # Docker health status
-docker-compose ps
+docker compose ps
 
 # Health endpoint
 curl http://localhost:8000/api/system/health
@@ -60,10 +60,10 @@ docker inspect telegram-automation | jq '.[0].State.Health'
 docker stats telegram-automation
 
 # View logs
-docker-compose logs -f telegram-automation
+docker compose logs -f telegram-automation
 
 # Last 100 lines
-docker-compose logs --tail=100 telegram-automation
+docker compose logs --tail=100 telegram-automation
 ```
 
 ## 🔐 Security Features
@@ -89,7 +89,7 @@ docker-compose logs --tail=100 telegram-automation
 
 ### Development
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+docker compose -f docker compose.yml -f docker compose.dev.yml up
 ```
 - Hot reload enabled
 - Debug logging
@@ -98,7 +98,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ### Production
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose -f docker compose.yml -f docker compose.prod.yml up -d
 ```
 - Nginx reverse proxy
 - Strict limits
@@ -107,7 +107,7 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ### Standard
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 - Balanced config
 - Moderate limits
@@ -130,7 +130,7 @@ make with-all
 
 ### Container won't start
 ```bash
-docker-compose logs telegram-automation
+docker compose logs telegram-automation
 ```
 
 ### Permission issues
@@ -144,7 +144,7 @@ docker exec telegram-automation python -c "import urllib.request; print(urllib.r
 ```
 
 ### Out of memory
-Edit `docker-compose.yml`:
+Edit `docker compose.yml`:
 ```yaml
 deploy:
   resources:
@@ -215,16 +215,16 @@ AUTO_DELETE_FILES=true
 
 ```bash
 # Stop everything immediately
-docker-compose down
+docker compose down
 
 # Force remove everything
-docker-compose down -v --rmi all
+docker compose down -v --rmi all
 
 # Restart from scratch
 make clean && make up
 
 # View all container processes
-docker-compose top
+docker compose top
 ```
 
 ## 📚 Documentation

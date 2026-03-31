@@ -83,7 +83,7 @@ These files remain in the project root:
 
 ### Docker
 - `Dockerfile` - Container image
-- `docker-compose.yml` - Orchestration
+- `docker compose.yml` - Orchestration
 - `.dockerignore` - Build exclusions
 - `docker-authorize.sh` - Linux/Mac auth helper
 - `docker-authorize.bat` - Windows auth helper

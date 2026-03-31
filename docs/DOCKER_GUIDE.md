@@ -38,7 +38,7 @@ All services include health checks:
 
 ```bash
 # Start with development overrides
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+docker compose -f docker compose.yml -f docker compose.dev.yml up
 
 # Features:
 # - Hot reload enabled
@@ -52,7 +52,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ```bash
 # Start with production overrides
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose -f docker compose.yml -f docker compose.prod.yml up -d
 
 # Features:
 # - Optimized logging
@@ -66,28 +66,28 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ```bash
 # Start with base configuration
-docker-compose up -d
+docker compose up -d
 
 # Balanced configuration for general use
 ```
 
 ## Configuration Files
 
-### docker-compose.yml (Base)
+### docker compose.yml (Base)
 - Core service definitions
 - Default resource limits
 - Health checks
 - Security options
 - Named volumes
 
-### docker-compose.dev.yml (Development)
+### docker compose.dev.yml (Development)
 - Development overrides
 - Hot reload support
 - Debug logging
 - Relaxed security
 - Always-on optional services
 
-### docker-compose.prod.yml (Production)
+### docker compose.prod.yml (Production)
 - Production optimizations
 - Nginx reverse proxy
 - Strict resource limits
@@ -118,7 +118,7 @@ docker-compose up -d
 ### redis (Optional)
 **Activation:**
 ```bash
-docker-compose --profile with-redis up -d
+docker compose --profile with-redis up -d
 ```
 
 **Configuration:**
@@ -130,7 +130,7 @@ docker-compose --profile with-redis up -d
 ### postgres (Optional)
 **Activation:**
 ```bash
-docker-compose --profile with-postgres up -d
+docker compose --profile with-postgres up -d
 ```
 
 **Configuration:**
@@ -169,7 +169,7 @@ POSTGRES_PASSWORD=secure_db_password
 
 ```bash
 # All services
-docker-compose ps
+docker compose ps
 
 # Specific service
 docker inspect --format='{{json .State.Health}}' telegram-automation | jq
@@ -201,7 +201,7 @@ docker inspect telegram-automation | jq '.[0].HostConfig.Memory'
 
 ### Adjust Limits
 
-Edit `docker-compose.yml` or override files:
+Edit `docker compose.yml` or override files:
 
 ```yaml
 deploy:
@@ -220,13 +220,13 @@ deploy:
 
 ```bash
 # Follow logs
-docker-compose logs -f telegram-automation
+docker compose logs -f telegram-automation
 
 # Last 100 lines
-docker-compose logs --tail=100 telegram-automation
+docker compose logs --tail=100 telegram-automation
 
 # Specific time range
-docker-compose logs --since 2024-01-01T00:00:00 telegram-automation
+docker compose logs --since 2024-01-01T00:00:00 telegram-automation
 ```
 
 ### Log Rotation
@@ -324,7 +324,7 @@ COPY . .
 
 ```bash
 # Check logs
-docker-compose logs telegram-automation
+docker compose logs telegram-automation
 
 # Check health
 docker inspect telegram-automation | jq '.[0].State.Health'
@@ -342,7 +342,7 @@ docker inspect telegram-automation | jq '.[0].State.Health'
 sudo chown -R 1000:1000 sessions logs data
 
 # Or run with current user
-docker-compose up --user $(id -u):$(id -g)
+docker compose up --user $(id -u):$(id -g)
 ```
 
 ### Health Check Failing
@@ -359,7 +359,7 @@ docker exec telegram-automation netstat -tlnp | grep 8000
 
 ```bash
 # Increase memory limit
-# Edit docker-compose.yml:
+# Edit docker compose.yml:
 deploy:
   resources:
     limits:
@@ -372,20 +372,20 @@ deploy:
 
 ```bash
 # Stop services
-docker-compose down
+docker compose down
 
 # Backup volumes
 tar -czf backup-$(date +%Y%m%d).tar.gz sessions/ logs/ data/
 
 # Restart services
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Restore
 
 ```bash
 # Stop services
-docker-compose down
+docker compose down
 
 # Restore from backup
 tar -xzf backup-20240101.tar.gz
@@ -394,7 +394,7 @@ tar -xzf backup-20240101.tar.gz
 sudo chown -R 1000:1000 sessions logs data
 
 # Restart services
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Production Deployment Checklist
@@ -429,20 +429,20 @@ Edit `nginx/nginx.conf` for:
 
 ```bash
 # Start PostgreSQL
-docker-compose --profile with-postgres up -d postgres
+docker compose --profile with-postgres up -d postgres
 
 # Update .env
 DATABASE_URL=postgresql+asyncpg://telegram:password@postgres:5432/telegram_automation
 
 # Restart application
-docker-compose restart telegram-automation
+docker compose restart telegram-automation
 ```
 
 ### Scaling
 
 ```bash
 # Run multiple instances (requires load balancer)
-docker-compose up -d --scale telegram-automation=3
+docker compose up -d --scale telegram-automation=3
 
 # Use nginx upstream for load balancing
 ```
@@ -469,8 +469,8 @@ logging:
 ## Support
 
 For issues or questions:
-1. Check logs: `docker-compose logs`
-2. Review health: `docker-compose ps`
+1. Check logs: `docker compose logs`
+2. Review health: `docker compose ps`
 3. Consult documentation in `docs/`
 4. Check GitHub issues
 

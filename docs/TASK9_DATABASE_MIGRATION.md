@@ -72,7 +72,7 @@ python main.py
 
 **Docker:**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Option 2: Run Migration Script Manually

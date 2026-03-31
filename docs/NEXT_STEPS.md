@@ -75,15 +75,15 @@ python manage.py authorize --docker
 ### Issue: "Container not found"
 **Solution:** Start the container first:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Issue: Wrong phone number in .env
 **Solution:** 
-1. Stop container: `docker-compose down`
+1. Stop container: `docker compose down`
 2. Edit `.env` file with correct phone number
 3. Delete session: `rm sessions/*.session`
-4. Start again: `docker-compose up -d`
+4. Start again: `docker compose up -d`
 5. Authorize: `python manage.py authorize --docker`
 
 ## Quick Commands Reference
@@ -96,13 +96,13 @@ python manage.py status
 python manage.py logs --docker
 
 # Restart container
-docker-compose restart
+docker compose restart
 
 # Stop everything
-docker-compose down
+docker compose down
 
 # Start again
-docker-compose up -d
+docker compose up -d
 ```
 
 ## What You Can Do After Authorization
@@ -137,7 +137,7 @@ python manage.py cleanup --docker
 
 1. **Check logs:**
    ```bash
-   docker-compose logs -f telegram-automation
+   docker compose logs -f telegram-automation
    ```
 
 2. **Check system status:**

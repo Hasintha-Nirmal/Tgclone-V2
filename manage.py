@@ -29,7 +29,7 @@ def cmd_start(args):
     """Start the system"""
     if args.docker:
         print("Starting Docker containers...")
-        run_command("docker-compose up -d")
+        run_command("docker compose up -d")
         print("\n✓ Started!")
         print("Access dashboard: http://localhost:8000")
         print("\nNext step: Authorize your account")
@@ -44,7 +44,7 @@ def cmd_stop(args):
     """Stop the system"""
     if args.docker:
         print("Stopping Docker containers...")
-        run_command("docker-compose down")
+        run_command("docker compose down")
         print("✓ Stopped!")
     else:
         print("Stop the local server with Ctrl+C")
@@ -53,7 +53,7 @@ def cmd_restart(args):
     """Restart the system"""
     if args.docker:
         print("Restarting Docker containers...")
-        run_command("docker-compose restart")
+        run_command("docker compose restart")
         print("✓ Restarted!")
     else:
         print("Restart the local server manually")
@@ -62,7 +62,7 @@ def cmd_logs(args):
     """View logs"""
     if args.docker:
         print("Viewing Docker logs (Ctrl+C to exit)...")
-        run_command("docker-compose logs -f", check=False)
+        run_command("docker compose logs -f", check=False)
     else:
         log_file = Path("logs/app.log")
         if log_file.exists():
@@ -76,7 +76,7 @@ def cmd_authorize(args):
         print("Authorizing in Docker container...")
         run_command("docker exec -it telegram-automation python authorize.py", check=False)
         print("\nRestarting container...")
-        run_command("docker-compose restart")
+        run_command("docker compose restart")
     else:
         print("Running authorization...")
         run_command("python authorize.py", check=False)
