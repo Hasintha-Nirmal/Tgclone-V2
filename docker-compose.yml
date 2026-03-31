@@ -13,14 +13,8 @@ services:
       - ./data:/app/data
       # Temporary storage (not persisted)
       - telegram-downloads:/app/downloads
-    environment:
-      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
-      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
-      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_USERNAME=${ADMIN_USERNAME}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - AUTO_DELETE_FILES=true
+    env_file:
+      - .env
     restart: unless-stopped
     networks:
       - telegram-net
