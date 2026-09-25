@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps BEFORE copying app code
@@ -16,12 +17,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create runtime directories (sessions & logs are bind-mounted but create anyway)
+# Create runtime directories
 RUN mkdir -p sessions logs downloads
 
-# Run as non-root for security
+# Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
+
+# Entrypoint runs as root to fix bind-mount dir permissions, then drops to appuser via gosu
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Default user (entrypoint overrides this by using gosu internally)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE 8000
 

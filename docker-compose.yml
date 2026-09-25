@@ -11,7 +11,7 @@ services:
       - "8000:8000"
     volumes:
       - ./sessions:/app/sessions          # Telegram session files (persistent!)
-      - ./logs:/app/logs                  # Application logs
+      - app-logs:/app/logs                 # Application logs (named volume = no permission issues)
       - telegram-downloads:/app/downloads # Temp media (ephemeral)
     env_file:
       - .env                              # MONGODB_URL must be Atlas URL here
@@ -41,7 +41,8 @@ services:
       - with-redis
 
 volumes:
-  telegram-downloads:   # Ephemeral - media files auto-deleted after upload
+  app-logs:            # Application logs (named volume avoids bind-mount permission issues)
+  telegram-downloads:  # Ephemeral - media files auto-deleted after upload
   redis-data:
 
 networks:

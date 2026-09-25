@@ -15,17 +15,25 @@ def setup_logger(name: str = "telegram_automation") -> logging.Logger:
     )
     console_handler.setFormatter(console_format)
     
-    # File handler
-    Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(settings.log_file)
-    file_handler.setLevel(logging.DEBUG)
-    file_format = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
-    )
-    file_handler.setFormatter(file_format)
-    
+    # File handler — gracefully skip if the log directory is not writable
+    # (e.g. Docker bind-mount permission issue on first run)
+    try:
+        Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(settings.log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_format = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+        )
+        file_handler.setFormatter(file_format)
+        logger.addHandler(file_handler)
+    except (PermissionError, OSError) as e:
+        # Fall back to console-only — app still starts, logs go to stdout
+        console_handler.setLevel(logging.DEBUG)
+        logging.getLogger("setup").warning(
+            f"Cannot write log file '{settings.log_file}': {e}. Logging to console only."
+        )
+
     logger.addHandler(console_handler)
-    logger.addHandler(file_handler)
     
     return logger
 
