@@ -1,22 +1,37 @@
-__pycache__
+# Python
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
 *.so
 *.egg
-*.egg-info
-dist
-build
+*.egg-info/
+dist/
+build/
+
+# Environment & secrets
 .env
-.venv
+.venv/
 venv/
 ENV/
+
+# Runtime data (mounted as volumes or excluded)
 sessions/*.session
-logs/*.log
-downloads/*
-data/*.db
-.git
+logs/
+downloads/
+data/
+
+# Git / IDE
+.git/
 .gitignore
+.vscode/
+.kiro/
+.github/
+
+# Docs (not needed in container)
 README.md
+SECURITY_UPDATE.md
+docs/
+
+# macOS
 .DS_Store

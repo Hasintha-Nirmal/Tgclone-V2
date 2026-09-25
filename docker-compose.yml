@@ -1,25 +1,55 @@
 version: '3.8'
 
 services:
+  # ── Main Application ──────────────────────────────────────────────────────
   telegram-automation:
     build: .
     container_name: telegram-automation
     ports:
       - "8000:8000"
     volumes:
-      # Persistent storage
-      - ./sessions:/app/sessions
-      - ./logs:/app/logs
-      - ./data:/app/data
-      # Temporary storage (not persisted)
-      - telegram-downloads:/app/downloads
+      - ./sessions:/app/sessions          # Telegram session files (persistent!)
+      - ./logs:/app/logs                  # Application logs
+      - telegram-downloads:/app/downloads # Temp media (ephemeral)
     env_file:
       - .env
+    environment:
+      # Point app at the MongoDB container (overrides .env value)
+      - MONGODB_URL=mongodb://mongo:27017
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy        # Don't start until MongoDB is ready
+    networks:
+      - telegram-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── MongoDB ───────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7-jammy
+    container_name: telegram-mongo
+    ports:
+      - "27017:27017"     # Expose for MongoDB Compass / external access
+    volumes:
+      - mongo-data:/data/db          # All job/checkpoint data persists here
+      - mongo-config:/data/configdb
     restart: unless-stopped
     networks:
       - telegram-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Optional: Redis for queue system
+  # ── Redis (optional) ──────────────────────────────────────────────────────
+  # Enable with: docker-compose --profile with-redis up
   redis:
     image: redis:7-alpine
     container_name: telegram-redis
@@ -33,29 +63,13 @@ services:
     profiles:
       - with-redis
 
-  # Optional: PostgreSQL instead of SQLite
-  postgres:
-    image: postgres:15-alpine
-    container_name: telegram-postgres
-    environment:
-      - POSTGRES_DB=telegram_automation
-      - POSTGRES_USER=telegram
-      - POSTGRES_PASSWORD=changeme
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - telegram-net
-    profiles:
-      - with-postgres
-
 volumes:
-  telegram-downloads:  # Temporary, not persisted
+  telegram-downloads:   # Ephemeral - media files deleted after upload
+  mongo-data:           # Persistent - all job/channel/checkpoint state
+  mongo-config:
   redis-data:
-  postgres-data:
 
 networks:
   telegram-net:
     driver: bridge
+

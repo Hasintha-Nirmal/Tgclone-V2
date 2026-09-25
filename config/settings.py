@@ -30,7 +30,11 @@ class Settings(BaseSettings):
             return None
         return v
     
-    # Database
+    # MongoDB
+    mongodb_url: str = "mongodb://localhost:27017"
+    mongodb_db_name: str = "tgcloner"
+    
+    # Legacy SQLite (kept for backward compat, not used)
     database_url: str = "sqlite:///./data/app.db"
     
     # Redis

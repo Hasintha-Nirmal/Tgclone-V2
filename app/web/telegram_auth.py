@@ -197,20 +197,13 @@ class TelegramAuthManager:
                     pass
                 del self.pending_auths[phone]
             
-            # Clear channels from database for this account
-            from app.utils.database import SessionLocal, Channel
-            db = SessionLocal()
+            # Clear channels from database (MongoDB)
             try:
-                # Delete all channels (they were fetched with this account)
-                # We'll clear all channels since we don't track which account fetched which channel
-                deleted_count = db.query(Channel).delete()
-                db.commit()
-                logger.info(f"Deleted {deleted_count} channels from database after logout")
+                from app.utils import db_ops
+                deleted_count = await db_ops.delete_all_channels()
+                logger.info(f"Deleted {deleted_count} channels from MongoDB after logout")
             except Exception as e:
                 logger.error(f"Error deleting channels: {e}")
-                db.rollback()
-            finally:
-                db.close()
             
             logger.info(f"Successfully logged out {phone}")
             

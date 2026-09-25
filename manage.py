@@ -52,8 +52,8 @@ def cmd_stop(args):
 def cmd_restart(args):
     """Restart the system"""
     if args.docker:
-        print("Restarting Docker containers...")
-        run_command("docker-compose restart")
+        print("Restarting app container (MongoDB keeps running)...")
+        run_command("docker-compose restart telegram-automation")
         print("✓ Restarted!")
     else:
         print("Restart the local server manually")
@@ -75,8 +75,8 @@ def cmd_authorize(args):
     if args.docker:
         print("Authorizing in Docker container...")
         run_command("docker exec -it telegram-automation python authorize.py", check=False)
-        print("\nRestarting container...")
-        run_command("docker-compose restart")
+        print("\nRestarting app container (MongoDB keeps running)...")
+        run_command("docker-compose restart telegram-automation")
     else:
         print("Running authorization...")
         run_command("python authorize.py", check=False)
@@ -102,12 +102,24 @@ def cmd_status(args):
         print("✗ No session file found")
         print("  Run: python manage.py authorize")
     
-    # Check Docker
+    # Check Docker - app container
     status = docker_status()
     if status:
-        print(f"✓ Docker container: {status}")
+        print(f"✓ App container: {status}")
     else:
-        print("✗ Docker container not running")
+        print("✗ App container not running")
+        print("  Run: python manage.py start --docker")
+
+    # Check Docker - mongo container
+    mongo_result = subprocess.run(
+        "docker ps --filter name=telegram-mongo --format '{{.Status}}'",
+        shell=True, capture_output=True, text=True
+    )
+    mongo_status = mongo_result.stdout.strip()
+    if mongo_status:
+        print(f"✓ MongoDB container: {mongo_status}")
+    else:
+        print("✗ MongoDB container not running")
         print("  Run: python manage.py start --docker")
     
     # Check web

@@ -3,7 +3,7 @@ from telethon.tl.functions.channels import GetFullChannelRequest
 from telethon.tl.types import Channel, Chat
 from typing import List, Dict, Optional
 from app.utils.logger import logger
-from app.utils.database import Channel as ChannelModel, SessionLocal
+from app.utils import db_ops
 
 class ChannelScraper:
     def __init__(self, client: TelegramClient):
@@ -25,7 +25,7 @@ class ChannelScraper:
                     channels.append(channel_info)
                     
                     if save_to_db:
-                        self._save_channel_to_db(channel_info)
+                        await self._save_channel_to_db(channel_info)
             
             logger.info(f"Found {len(channels)} channels")
             return channels
@@ -65,35 +65,12 @@ class ChannelScraper:
             "access_hash": channel.access_hash
         }
     
-    def _save_channel_to_db(self, channel_info: Dict):
-        """Save channel to database"""
-        db = SessionLocal()
+    async def _save_channel_to_db(self, channel_info: Dict):
+        """Save channel to MongoDB"""
         try:
-            existing = db.query(ChannelModel).filter(
-                ChannelModel.channel_id == channel_info["channel_id"]
-            ).first()
-            
-            if existing:
-                existing.title = channel_info["title"]
-                existing.username = channel_info["username"]
-                existing.member_count = channel_info["member_count"]
-                existing.is_private = channel_info["is_private"]
-            else:
-                channel = ChannelModel(
-                    channel_id=channel_info["channel_id"],
-                    title=channel_info["title"],
-                    username=channel_info["username"],
-                    member_count=channel_info["member_count"],
-                    is_private=channel_info["is_private"]
-                )
-                db.add(channel)
-            
-            db.commit()
+            await db_ops.save_channel(channel_info)
         except Exception as e:
             logger.error(f"Error saving channel to DB: {e}")
-            db.rollback()
-        finally:
-            db.close()
     
     async def search_channels(self, query: str) -> List[Dict]:
         """Search channels by name or username"""
