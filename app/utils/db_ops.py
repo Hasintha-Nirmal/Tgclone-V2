@@ -162,9 +162,24 @@ async def get_checkpoint(job_id: str) -> Optional[dict]:
 
 
 async def delete_checkpoint(job_id: str):
-    """Delete checkpoint after job completes successfully"""
+    """Delete checkpoint (called only on manual job deletion by user)"""
     db = await get_db()
     await db.job_checkpoints.delete_one({"job_id": job_id})
+
+
+async def save_checkpoint_completed(job_id: str):
+    """
+    Mark a checkpoint as completed instead of deleting it.
+    This preserves the history record in MongoDB while preventing
+    the job from showing up as 'resumable' on next startup.
+    Only deleted when the user explicitly deletes the job from the UI.
+    """
+    db = await get_db()
+    await db.job_checkpoints.update_one(
+        {"job_id": job_id},
+        {"$set": {"completed": True, "updated_at": datetime.utcnow()}},
+        upsert=True
+    )
 
 
 async def get_resumable_jobs() -> List[dict]:
@@ -172,6 +187,7 @@ async def get_resumable_jobs() -> List[dict]:
     Return jobs that were interrupted (status=running/pending) along
     with their last checkpoint.  Called on startup to show the user
     which jobs can be resumed.
+    Only includes checkpoints that are NOT marked as completed.
     """
     db = await get_db()
     # Find all jobs that were running or pending when the VPS died
@@ -184,7 +200,7 @@ async def get_resumable_jobs() -> List[dict]:
     results = []
     for job in interrupted_jobs:
         checkpoint = await db.job_checkpoints.find_one(
-            {"job_id": job["job_id"]}, {"_id": 0}
+            {"job_id": job["job_id"], "completed": {"$ne": True}}, {"_id": 0}
         )
         results.append({
             "job": job,

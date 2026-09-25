@@ -756,6 +756,8 @@
                 const autoSyncIcon = job.auto_sync
                     ? '<span class="sync-on">🔄 ON</span>'
                     : '<span class="sync-off">OFF</span>';
+                // Show Resume for any job that is not currently running
+                const canResume = ['stopped', 'failed', 'completed', 'pending'].includes(job.status);
                 html += `<tr>
                     <td><code>${job.job_id.substring(0, 8)}</code></td>
                     <td><code>${job.source_channel}</code></td>
@@ -763,8 +765,9 @@
                     <td><span class="status ${statusClass}">${job.status}</span></td>
                     <td style="font-variant-numeric: tabular-nums;">${job.processed_messages} / ${job.total_messages || '?'}</td>
                     <td>${autoSyncIcon}</td>
-                    <td style="display: flex; gap: 6px; align-items: center;">
+                    <td style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                         ${job.status === 'running' ? `<button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="stopJob('${job.job_id}')">⏹ Stop</button>` : ''}
+                        ${canResume ? `<button class="btn btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="resumeJob('${job.job_id}')">▶ Resume</button>` : ''}
                         <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteJob('${job.job_id}')">🗑 Delete</button>
                     </td>
                 </tr>`;
@@ -810,6 +813,30 @@
                 loadJobs();
             } catch (e) {
                 alert('Error stopping job');
+            }
+        }
+
+        async function resumeJob(jobId) {
+            // Fetch checkpoint info first so user knows where it will resume from
+            try {
+                const infoRes = await fetch(`/api/jobs/${jobId}/checkpoint`);
+                const info = await infoRes.json();
+                const resumeFrom = info.checkpoint ? info.checkpoint.last_message_id : 'beginning';
+                const processed = info.checkpoint ? info.checkpoint.processed_messages : 0;
+
+                if (!confirm(`Resume job ${jobId.substring(0,8)}?\n\nWill continue from message ID: ${resumeFrom}\nAlready processed: ${processed} messages`)) return;
+
+                const res = await fetch(`/api/jobs/${jobId}/resume`, {method: 'POST'});
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(`✅ Job resumed!\nResuming from message ID: ${data.resume_from_message_id}`);
+                    loadJobs();
+                } else {
+                    const err = await res.json();
+                    alert('Failed to resume: ' + (err.detail || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error resuming job: ' + e.message);
             }
         }
 

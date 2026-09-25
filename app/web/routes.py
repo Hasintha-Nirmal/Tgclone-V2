@@ -425,8 +425,9 @@ async def run_clone_job(
         if auto_sync:
             sync_worker.add_job(job_id)
 
-        # Job completed cleanly — remove checkpoint so it doesn't show as resumable
-        await db_ops.delete_checkpoint(job_id)
+        # Job completed cleanly — mark checkpoint as completed so it won't show as
+        # resumable, but keep it in MongoDB for history. User deletes it via the UI.
+        await db_ops.save_checkpoint_completed(job_id)
 
         storage_manager.cleanup_job(job_id)
 
