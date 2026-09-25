@@ -4,227 +4,635 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telegram Automation Dashboard</title>
+    <meta name="description" content="Telegram Channel Cloning & Synchronization Dashboard">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #0d0f1a;
+            --bg-secondary: #131628;
+            --bg-card: rgba(255,255,255,0.04);
+            --bg-card-hover: rgba(255,255,255,0.07);
+            --border: rgba(255,255,255,0.08);
+            --border-active: rgba(41,182,246,0.5);
+            --accent: #29b6f6;
+            --accent-2: #7c3aed;
+            --accent-glow: rgba(41,182,246,0.15);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #475569;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #29b6f6;
+            --radius: 14px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            --shadow-glow: 0 0 40px rgba(41,182,246,0.08);
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #f5f5f5; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        header { background: #0088cc; color: white; padding: 20px; margin-bottom: 30px; border-radius: 8px; }
-        h1 { font-size: 28px; margin-bottom: 5px; }
-        .subtitle { opacity: 0.9; font-size: 14px; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
-        .stat-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .stat-value { font-size: 32px; font-weight: bold; color: #0088cc; }
-        .stat-label { color: #666; margin-top: 5px; font-size: 14px; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
-        .tab { padding: 12px 24px; cursor: pointer; background: none; border: none; font-size: 16px; color: #666; transition: all 0.3s; }
-        .tab.active { color: #0088cc; border-bottom: 2px solid #0088cc; margin-bottom: -2px; }
-        .tab:hover { color: #0088cc; }
-        .content { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .btn { padding: 10px 20px; background: #0088cc; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
-        .btn:hover { background: #006699; }
-        .btn-secondary { background: #6c757d; }
-        .btn-danger { background: #dc3545; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f8f9fa; font-weight: 600; }
-        .search-box { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; }
-        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            background-image:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(41,182,246,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(124,58,237,0.05) 0%, transparent 50%);
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px 20px; }
+
+        /* ── Header ── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 22px 28px;
+            margin-bottom: 28px;
+            border-radius: var(--radius);
+            background: linear-gradient(135deg, rgba(41,182,246,0.12) 0%, rgba(124,58,237,0.1) 100%);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+        }
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%; left: -10%;
+            width: 300px; height: 200px;
+            background: radial-gradient(circle, rgba(41,182,246,0.12), transparent 70%);
+            pointer-events: none;
+        }
+        .header-left { display: flex; align-items: center; gap: 14px; position: relative; }
+        .header-icon {
+            width: 46px; height: 46px;
+            background: linear-gradient(135deg, #29b6f6, #7c3aed);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 4px 15px rgba(41,182,246,0.3);
+        }
+        h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .subtitle { color: rgba(255,255,255,0.55); font-size: 13px; margin-top: 2px; font-weight: 400; }
+        .header-badge {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            background: rgba(16,185,129,0.15);
+            border: 1px solid rgba(16,185,129,0.25);
+            border-radius: 20px;
+            font-size: 12px; font-weight: 500; color: var(--success);
+        }
+        .header-badge::before {
+            content: '';
+            width: 7px; height: 7px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
+        /* ── Stats Grid ── */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 22px 24px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .stat-card:hover { background: var(--bg-card-hover); transform: translateY(-2px); border-color: var(--border-active); box-shadow: var(--shadow-glow); }
+        .stat-card:hover::after { opacity: 1; }
+        .stat-icon { font-size: 20px; margin-bottom: 12px; opacity: 0.8; }
+        .stat-value { font-size: 34px; font-weight: 800; background: linear-gradient(135deg, var(--accent), #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -1px; }
+        .stat-label { color: var(--text-secondary); margin-top: 4px; font-size: 13px; font-weight: 500; }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 6px;
+            width: fit-content;
+        }
+        .tab {
+            padding: 9px 20px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+            white-space: nowrap;
+        }
+        .tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .tab.active {
+            color: var(--bg-primary);
+            background: linear-gradient(135deg, var(--accent), #60a5fa);
+            font-weight: 600;
+            box-shadow: 0 2px 12px rgba(41,182,246,0.3);
+        }
+
+        /* ── Content Panels ── */
+        .content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            backdrop-filter: blur(10px);
+            animation: fadeIn 0.2s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ── Section Header ── */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .section-title { font-size: 18px; font-weight: 700; letter-spacing: -0.2px; }
+        .section-title span { color: var(--accent); }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 9px 18px;
+            background: linear-gradient(135deg, var(--accent), #60a5fa);
+            color: #0d0f1a;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+            display: inline-flex; align-items: center; gap: 6px;
+            letter-spacing: 0.2px;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(41,182,246,0.35); filter: brightness(1.1); }
+        .btn:active { transform: translateY(0); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.08);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.12); box-shadow: none; }
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+        .btn-danger:hover { box-shadow: 0 4px 16px rgba(239,68,68,0.35); }
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        /* ── Alerts/Tips ── */
+        .alert {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 14px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .alert-info { background: rgba(41,182,246,0.08); border: 1px solid rgba(41,182,246,0.2); color: #93c5fd; }
+        .alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: #fcd34d; }
+        .alert-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+        /* ── Search ── */
+        .search-box {
+            width: 100%;
+            padding: 11px 16px 11px 42px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .search-box::placeholder { color: var(--text-muted); }
+        .search-box:focus { outline: none; border-color: var(--border-active); background: rgba(41,182,246,0.05); box-shadow: 0 0 0 3px rgba(41,182,246,0.08); }
+        .search-wrapper { position: relative; }
+        .search-wrapper::before {
+            content: '🔍';
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            font-size: 14px; pointer-events: none;
+            margin-bottom: 20px;
+        }
+
+        /* ── Table ── */
+        .table-wrapper { overflow-x: auto; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 13px 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.15s;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255,255,255,0.03); color: var(--text-primary); }
+        td code, th code {
+            font-family: 'SFMono-Regular', 'Consolas', monospace;
+            background: rgba(255,255,255,0.07);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: var(--accent);
+        }
+
+        /* ── Status Badges ── */
+        .status {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+        .status-running { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+        .status-completed { background: rgba(41,182,246,0.15); color: var(--accent); border: 1px solid rgba(41,182,246,0.2); }
+        .status-failed { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+        .status-pending { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+
+        /* ── Loading ── */
+        .loading {
+            text-align: center;
+            padding: 60px 40px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        /* Spinner is a standalone element placed inline in HTML — NOT a ::before pseudo-element
+           so it disappears the moment JS replaces the innerHTML */
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid rgba(255,255,255,0.08);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Forms ── */
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; margin-bottom: 7px; font-weight: 500; font-size: 13px; color: var(--text-secondary); }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 11px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+        .form-group input::placeholder { color: var(--text-muted); }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--border-active);
+            background: rgba(41,182,246,0.05);
+            box-shadow: 0 0 0 3px rgba(41,182,246,0.08);
+        }
         .form-group input[type="checkbox"] { width: auto; }
-        .checkbox-label { 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-            cursor: pointer; 
-            padding: 12px; 
-            background: #f8f9fa; 
-            border-radius: 5px; 
-            border: 2px solid #ddd;
-            transition: all 0.3s;
+        .form-group small { display: block; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+        .form-group small a { color: var(--accent); text-decoration: none; }
+        .form-group small a:hover { text-decoration: underline; }
+        .required { color: #f87171; margin-left: 3px; }
+
+        /* ── Checkbox Toggle ── */
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            cursor: pointer;
+            padding: 16px;
+            background: rgba(41,182,246,0.05);
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(41,182,246,0.15);
+            transition: all 0.2s;
         }
-        .checkbox-label:hover {
-            background: #e9ecef;
-            border-color: #0088cc;
+        .checkbox-label:hover { background: rgba(41,182,246,0.1); border-color: var(--border-active); }
+        .checkbox-label input[type="checkbox"] {
+            width: 20px !important; height: 20px;
+            cursor: pointer;
+            accent-color: var(--accent);
         }
-        .checkbox-label input[type="checkbox"]:checked + span {
-            color: #0088cc;
+        .checkbox-label input[type="checkbox"]:checked + span { color: var(--accent); }
+        .checkbox-label span { font-weight: 600; font-size: 14px; }
+        .checkbox-label span small { display: block; font-weight: 400; color: var(--text-muted); margin-top: 3px; font-size: 12px; }
+
+        /* ── Login Form Panel ── */
+        #login-form {
+            margin-top: 28px;
+            padding: 24px;
+            background: rgba(255,255,255,0.03);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
         }
-        .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
-        .status-running { background: #d4edda; color: #155724; }
-        .status-completed { background: #cce5ff; color: #004085; }
-        .status-failed { background: #f8d7da; color: #721c24; }
-        .status-pending { background: #fff3cd; color: #856404; }
-        .loading { text-align: center; padding: 40px; color: #666; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
-        .modal-content { background: white; max-width: 600px; margin: 50px auto; padding: 30px; border-radius: 8px; }
-        .modal.active { display: block; }
-        .close-modal { float: right; font-size: 24px; cursor: pointer; color: #999; }
+        #login-form h3 { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: var(--text-primary); }
+
+        /* ── Modal ── */
+        .modal {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            max-width: 600px; width: 90%;
+            padding: 30px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            animation: fadeIn 0.2s ease;
+        }
+        .close-modal {
+            float: right; font-size: 20px; cursor: pointer; color: var(--text-muted);
+            background: none; border: none; font-family: inherit;
+            transition: color 0.2s;
+        }
+        .close-modal:hover { color: var(--text-primary); }
+
+        /* ── Empty State ── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 40px;
+            color: var(--text-muted);
+        }
+        .empty-state .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.5; }
+        .empty-state p { font-size: 14px; line-height: 1.6; }
+
+        /* ── No-account warning ── */
+        .no-account-state {
+            text-align: center;
+            padding: 48px 32px;
+            background: rgba(245,158,11,0.06);
+            border: 1px solid rgba(245,158,11,0.18);
+            border-radius: var(--radius);
+        }
+        .no-account-state h3 { font-size: 18px; color: #fbbf24; margin-bottom: 12px; }
+        .no-account-state p { font-size: 14px; color: #fcd34d; opacity: 0.75; margin-bottom: 20px; }
+
+        /* ── Form section divider ── */
+        .form-section { max-width: 560px; }
+        .form-actions { display: flex; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+
+        /* ── Type badge ── */
+        .type-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .type-public { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+        .type-private { background: rgba(124,58,237,0.12); color: #a78bfa; border: 1px solid rgba(124,58,237,0.2); }
+
+        /* ── Sync badge ── */
+        .sync-on { color: #34d399; font-weight: 600; font-size: 12px; }
+        .sync-off { color: var(--text-muted); font-size: 12px; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .container { padding: 16px 14px; }
+            .tabs { width: 100%; overflow-x: auto; }
+            header { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .stats { grid-template-columns: 1fr 1fr; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- ── Header ── -->
         <header>
-            <h1>📱 Telegram Automation System</h1>
-            <div class="subtitle">Channel Cloning & Synchronization Dashboard</div>
+            <div class="header-left">
+                <div class="header-icon">📡</div>
+                <div>
+                    <h1>Telegram Automation System</h1>
+                    <div class="subtitle">Channel Cloning &amp; Synchronization Dashboard</div>
+                </div>
+            </div>
+            <div class="header-badge">System Online</div>
         </header>
 
+        <!-- ── Stats ── -->
         <div class="stats" id="stats">
             <div class="stat-card">
+                <div class="stat-icon">📡</div>
                 <div class="stat-value" id="stat-channels">-</div>
                 <div class="stat-label">Total Channels</div>
             </div>
             <div class="stat-card">
+                <div class="stat-icon">📋</div>
                 <div class="stat-value" id="stat-jobs">-</div>
                 <div class="stat-label">Total Jobs</div>
             </div>
             <div class="stat-card">
+                <div class="stat-icon">⚡</div>
                 <div class="stat-value" id="stat-active">-</div>
                 <div class="stat-label">Active Jobs</div>
             </div>
             <div class="stat-card">
+                <div class="stat-icon">💾</div>
                 <div class="stat-value" id="stat-disk">-</div>
                 <div class="stat-label">Disk Usage</div>
             </div>
         </div>
 
+        <!-- ── Tabs ── -->
         <div class="tabs">
-            <button class="tab active" onclick="showTab('channels', this)">Channels</button>
-            <button class="tab" onclick="showTab('jobs', this)">Clone Jobs</button>
-            <button class="tab" onclick="showTab('create', this)">Create Job</button>
-            <button class="tab" onclick="showTab('accounts', this)">Accounts</button>
+            <button class="tab active" onclick="showTab('channels', this)">📡 Channels</button>
+            <button class="tab" onclick="showTab('jobs', this)">📋 Clone Jobs</button>
+            <button class="tab" onclick="showTab('create', this)">➕ Create Job</button>
+            <button class="tab" onclick="showTab('accounts', this)">👤 Accounts</button>
         </div>
 
+        <!-- ── Channels Tab ── -->
         <div class="content" id="channels-tab">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h2>My Channels</h2>
+            <div class="section-header">
+                <h2 class="section-title">My <span>Channels</span></h2>
                 <button class="btn" onclick="refreshChannels()">🔄 Refresh</button>
             </div>
-            <div style="background: #e7f3ff; border-left: 4px solid #0088cc; padding: 12px; margin-bottom: 15px; border-radius: 5px; font-size: 14px;">
-                💡 <strong>Tip:</strong> Make sure you have an account logged in (check Accounts tab) before refreshing channels.
+            <div class="alert alert-info">
+                <span class="alert-icon">💡</span>
+                <span><strong>Tip:</strong> Make sure you have an account logged in (check Accounts tab) before refreshing channels.</span>
             </div>
-            <input type="text" class="search-box" id="channel-search" placeholder="Search channels..." onkeyup="filterChannels()">
-            <div id="channels-list" class="loading">Loading channels...</div>
+            <div class="search-wrapper">
+                <input type="text" class="search-box" id="channel-search" placeholder="Search channels by name or username..." onkeyup="filterChannels()">
+            </div>
+            <div id="channels-list" class="loading"><div class="spinner"></div>Loading channels...</div>
         </div>
 
+        <!-- ── Jobs Tab ── -->
         <div class="content" id="jobs-tab" style="display: none;">
-            <h2>Clone Jobs</h2>
-            <div id="jobs-list" class="loading">Loading jobs...</div>
+            <div class="section-header">
+                <h2 class="section-title">Clone <span>Jobs</span></h2>
+            </div>
+            <div id="jobs-list" class="loading"><div class="spinner"></div>Loading jobs...</div>
         </div>
 
+        <!-- ── Create Job Tab ── -->
         <div class="content" id="create-tab" style="display: none;">
-            <h2>Create Clone Job</h2>
-            <div style="background: #e7f3ff; border-left: 4px solid #0088cc; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-                <strong>💡 Tip:</strong> Enable Auto-Sync to automatically clone new messages in real-time. 
-                The system will check for new messages every 30 seconds and clone them automatically.
+            <div class="section-header">
+                <h2 class="section-title">Create Clone <span>Job</span></h2>
             </div>
-            <form id="create-job-form" onsubmit="createJob(event)">
+            <div class="alert alert-info">
+                <span class="alert-icon">💡</span>
+                <span><strong>Tip:</strong> Enable Auto-Sync to automatically clone new messages in real-time. The system will check for new messages every 30 seconds and clone them automatically.</span>
+            </div>
+            <form id="create-job-form" class="form-section" onsubmit="createJob(event)">
                 <div class="form-group">
-                    <label>Source Channel ID <span style="color: #dc3545;">*</span></label>
+                    <label>Source Channel ID <span class="required">*</span></label>
                     <input type="text" id="source-channel" required placeholder="-1001234567890">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        📋 Copy from the Channels tab above
-                    </small>
+                    <small>📋 Copy from the Channels tab above</small>
                 </div>
                 <div class="form-group">
-                    <label>Target Channel ID <span style="color: #dc3545;">*</span></label>
+                    <label>Target Channel ID <span class="required">*</span></label>
                     <input type="text" id="target-channel" required placeholder="-1001234567890">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        📋 Where messages will be cloned to (you must be admin)
-                    </small>
+                    <small>📋 Where messages will be cloned to (you must be admin)</small>
                 </div>
                 <div class="form-group">
-                    <label>Start Message ID (optional)</label>
+                    <label>Start Message ID <span style="color: var(--text-muted); font-weight: 400;">(optional)</span></label>
                     <input type="number" id="start-message-id" placeholder="Leave empty to clone all">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        💡 Clone from this message ID onwards
-                    </small>
+                    <small>💡 Clone from this message ID onwards</small>
                 </div>
                 <div class="form-group">
-                    <label>Limit (optional)</label>
+                    <label>Limit <span style="color: var(--text-muted); font-weight: 400;">(optional)</span></label>
                     <input type="number" id="limit" placeholder="Leave empty for no limit">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        💡 Maximum number of messages to clone
-                    </small>
+                    <small>💡 Maximum number of messages to clone</small>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="auto-sync" style="width: 20px; height: 20px; cursor: pointer;">
-                        <span style="font-weight: 600; font-size: 15px;">
+                        <span>
                             🔄 Enable Auto-Sync
-                            <small style="display: block; font-weight: normal; color: #666; margin-top: 3px;">
-                                Automatically clone new messages in real-time (every 30 seconds)
-                            </small>
+                            <small>Automatically clone new messages in real-time (every 30 seconds)</small>
                         </span>
                     </label>
                 </div>
-                <button type="submit" class="btn">Create Job</button>
+                <div class="form-actions">
+                    <button type="submit" class="btn">🚀 Create Job</button>
+                </div>
             </form>
         </div>
 
+        <!-- ── Accounts Tab ── -->
         <div class="content" id="accounts-tab" style="display: none;">
-            <h2>Telegram Accounts</h2>
-            
-            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-                <strong>⚠️ Note:</strong> Logging out an account will also clear the channel list, since channels are fetched using the logged-in account.
+            <div class="section-header">
+                <h2 class="section-title">Telegram <span>Accounts</span></h2>
             </div>
-            
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3>Logged In Accounts</h3>
+
+            <div class="alert alert-warning">
+                <span class="alert-icon">⚠️</span>
+                <span><strong>Note:</strong> Logging out an account will also clear the channel list, since channels are fetched using the logged-in account.</span>
+            </div>
+
+            <div class="section-header" style="margin-bottom: 16px;">
+                <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary);">Logged In Accounts</h3>
                 <button class="btn" onclick="showLoginForm()">➕ Add Account</button>
             </div>
-            
-            <div id="accounts-list" class="loading">Loading accounts...</div>
-            
+
+            <div id="accounts-list" class="loading"><div class="spinner"></div>Loading accounts...</div>
+
             <!-- Login Form (hidden by default) -->
-            <div id="login-form" style="display: none; margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+            <div id="login-form" style="display: none;">
                 <h3>Add Telegram Account</h3>
-                
+
                 <div id="login-step-1">
                     <div class="form-group">
-                        <label>Phone Number <span style="color: #dc3545;">*</span></label>
+                        <label>Phone Number <span class="required">*</span></label>
                         <input type="text" id="login-phone" placeholder="+1234567890">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Include country code (e.g., +1 for US, +94 for Sri Lanka)
-                        </small>
+                        <small>Include country code (e.g., +1 for US, +94 for Sri Lanka)</small>
                     </div>
                     <div class="form-group">
-                        <label>API ID <span style="color: #dc3545;">*</span></label>
+                        <label>API ID <span class="required">*</span></label>
                         <input type="number" id="login-api-id" placeholder="12345678">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Get from <a href="https://my.telegram.org" target="_blank">my.telegram.org</a>
-                        </small>
+                        <small>Get from <a href="https://my.telegram.org" target="_blank">my.telegram.org</a></small>
                     </div>
                     <div class="form-group">
-                        <label>API Hash <span style="color: #dc3545;">*</span></label>
+                        <label>API Hash <span class="required">*</span></label>
                         <input type="text" id="login-api-hash" placeholder="abcdef1234567890">
                     </div>
-                    <button class="btn" onclick="sendLoginCode()">Send Code</button>
-                    <button class="btn btn-secondary" onclick="hideLoginForm()">Cancel</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" onclick="sendLoginCode()">📨 Send Code</button>
+                        <button class="btn btn-secondary" onclick="hideLoginForm()">Cancel</button>
+                    </div>
                 </div>
-                
+
                 <div id="login-step-2" style="display: none;">
                     <div class="form-group">
-                        <label>Verification Code <span style="color: #dc3545;">*</span></label>
+                        <label>Verification Code <span class="required">*</span></label>
                         <input type="text" id="login-code" placeholder="12345">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Check your Telegram app for the code
-                        </small>
+                        <small>Check your Telegram app for the code</small>
                     </div>
-                    <button class="btn" onclick="verifyLoginCode()">Verify Code</button>
-                    <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" onclick="verifyLoginCode()">✅ Verify Code</button>
+                        <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+                    </div>
                 </div>
-                
+
                 <div id="login-step-3" style="display: none;">
                     <div class="form-group">
-                        <label>2FA Password <span style="color: #dc3545;">*</span></label>
+                        <label>2FA Password <span class="required">*</span></label>
                         <input type="password" id="login-password" placeholder="Your 2FA password">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Your account has two-factor authentication enabled
-                        </small>
+                        <small>Your account has two-factor authentication enabled</small>
                     </div>
-                    <button class="btn" onclick="verifyPassword()">Verify Password</button>
-                    <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" onclick="verifyPassword()">🔐 Verify Password</button>
+                        <button class="btn btn-secondary" onclick="cancelLogin()">Cancel</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -253,14 +661,12 @@
                 // First check if any accounts are logged in
                 const accountsRes = await fetch('/api/accounts/list');
                 const accountsData = await accountsRes.json();
-                
+
                 if (accountsData.accounts.length === 0) {
                     document.getElementById('channels-list').innerHTML = `
-                        <div style="text-align: center; padding: 40px; background: #fff3cd; border-radius: 8px; border: 2px solid #ffc107;">
-                            <h3 style="color: #856404; margin-bottom: 15px;">⚠️ No Accounts Logged In</h3>
-                            <p style="color: #856404; margin-bottom: 20px;">
-                                You need to login a Telegram account first to view channels.
-                            </p>
+                        <div class="no-account-state">
+                            <h3>⚠️ No Accounts Logged In</h3>
+                            <p>You need to login a Telegram account first to view channels.</p>
                             <button class="btn" onclick="showTab('accounts', document.querySelectorAll('.tab')[3])">
                                 Go to Accounts Tab
                             </button>
@@ -268,12 +674,12 @@
                     `;
                     return;
                 }
-                
+
                 const res = await fetch('/api/channels/list');
                 channels = await res.json();
                 displayChannels(channels);
             } catch (e) {
-                document.getElementById('channels-list').innerHTML = '<p>Error loading channels</p>';
+                document.getElementById('channels-list').innerHTML = '<p style="color: var(--danger); padding: 20px;">Error loading channels</p>';
             }
         }
 
@@ -281,46 +687,48 @@
             // Check if any accounts are logged in
             const accountsRes = await fetch('/api/accounts/list');
             const accountsData = await accountsRes.json();
-            
+
             if (accountsData.accounts.length === 0) {
                 alert('Please login a Telegram account first!\n\nGo to the Accounts tab and click "Add Account".');
                 showTab('accounts', document.querySelectorAll('.tab')[3]);
                 return;
             }
-            
+
             document.getElementById('channels-list').innerHTML = '<div class="loading">Fetching channels from Telegram... This may take a moment.</div>';
             try {
                 const res = await fetch('/api/channels/list?refresh=true');
                 channels = await res.json();
                 displayChannels(channels);
             } catch (e) {
-                document.getElementById('channels-list').innerHTML = '<p>Error refreshing channels</p>';
+                document.getElementById('channels-list').innerHTML = '<p style="color: var(--danger); padding: 20px;">Error refreshing channels</p>';
             }
         }
 
         function displayChannels(data) {
             if (data.length === 0) {
-                document.getElementById('channels-list').innerHTML = '<p>No channels found</p>';
+                document.getElementById('channels-list').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No channels found</p></div>';
                 return;
             }
-            
-            let html = '<table><thead><tr><th>Title</th><th>Channel ID</th><th>Username</th><th>Type</th></tr></thead><tbody>';
+
+            let html = '<div class="table-wrapper"><table><thead><tr><th>Title</th><th>Channel ID</th><th>Username</th><th>Type</th></tr></thead><tbody>';
             data.forEach(ch => {
+                const typeClass = ch.is_private ? 'type-private' : 'type-public';
+                const typeLabel = ch.is_private ? 'Private' : 'Public';
                 html += `<tr>
-                    <td>${ch.title}</td>
+                    <td style="font-weight: 500; color: var(--text-primary);">${ch.title}</td>
                     <td><code>${ch.channel_id}</code></td>
-                    <td>${ch.username || '-'}</td>
-                    <td>${ch.is_private ? 'Private' : 'Public'}</td>
+                    <td style="color: var(--text-muted);">${ch.username || '—'}</td>
+                    <td><span class="type-badge ${typeClass}">${typeLabel}</span></td>
                 </tr>`;
             });
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             document.getElementById('channels-list').innerHTML = html;
         }
 
         function filterChannels() {
             const search = document.getElementById('channel-search').value.toLowerCase();
-            const filtered = channels.filter(ch => 
-                ch.title.toLowerCase().includes(search) || 
+            const filtered = channels.filter(ch =>
+                ch.title.toLowerCase().includes(search) ||
                 (ch.username && ch.username.toLowerCase().includes(search))
             );
             displayChannels(filtered);
@@ -332,34 +740,36 @@
                 jobs = await res.json();
                 displayJobs(jobs);
             } catch (e) {
-                document.getElementById('jobs-list').innerHTML = '<p>Error loading jobs</p>';
+                document.getElementById('jobs-list').innerHTML = '<p style="color: var(--danger); padding: 20px;">Error loading jobs</p>';
             }
         }
 
         function displayJobs(data) {
             if (data.length === 0) {
-                document.getElementById('jobs-list').innerHTML = '<p>No jobs found</p>';
+                document.getElementById('jobs-list').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>No jobs found</p></div>';
                 return;
             }
-            
-            let html = '<table><thead><tr><th>Job ID</th><th>Source</th><th>Target</th><th>Status</th><th>Progress</th><th>Auto-Sync</th><th>Actions</th></tr></thead><tbody>';
+
+            let html = '<div class="table-wrapper"><table><thead><tr><th>Job ID</th><th>Source</th><th>Target</th><th>Status</th><th>Progress</th><th>Auto-Sync</th><th>Actions</th></tr></thead><tbody>';
             data.forEach(job => {
                 const statusClass = `status-${job.status}`;
-                const autoSyncIcon = job.auto_sync ? '🔄 <span style="color: #28a745; font-weight: bold;">ON</span>' : '<span style="color: #999;">OFF</span>';
+                const autoSyncIcon = job.auto_sync
+                    ? '<span class="sync-on">🔄 ON</span>'
+                    : '<span class="sync-off">OFF</span>';
                 html += `<tr>
                     <td><code>${job.job_id.substring(0, 8)}</code></td>
                     <td><code>${job.source_channel}</code></td>
                     <td><code>${job.target_channel}</code></td>
                     <td><span class="status ${statusClass}">${job.status}</span></td>
-                    <td>${job.processed_messages} / ${job.total_messages || '?'}</td>
+                    <td style="font-variant-numeric: tabular-nums;">${job.processed_messages} / ${job.total_messages || '?'}</td>
                     <td>${autoSyncIcon}</td>
-                    <td>
-                        ${job.status === 'running' ? `<button class="btn btn-secondary" onclick="stopJob('${job.job_id}')">Stop</button>` : ''}
-                        <button class="btn btn-danger" onclick="deleteJob('${job.job_id}')">Delete</button>
+                    <td style="display: flex; gap: 6px; align-items: center;">
+                        ${job.status === 'running' ? `<button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="stopJob('${job.job_id}')">⏹ Stop</button>` : ''}
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteJob('${job.job_id}')">🗑 Delete</button>
                     </td>
                 </tr>`;
             });
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             document.getElementById('jobs-list').innerHTML = html;
         }
 
@@ -372,14 +782,14 @@
                 limit: document.getElementById('limit').value ? parseInt(document.getElementById('limit').value) : null,
                 auto_sync: document.getElementById('auto-sync').checked
             };
-            
+
             try {
                 const res = await fetch('/api/jobs/clone', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(data)
                 });
-                
+
                 if (res.ok) {
                     alert('Job created successfully!');
                     document.getElementById('create-job-form').reset();
@@ -417,7 +827,7 @@
         function showTab(tab, clickedElement) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.content').forEach(c => c.style.display = 'none');
-            
+
             // If called from a click event, highlight the clicked tab
             if (clickedElement) {
                 clickedElement.classList.add('active');
@@ -430,9 +840,9 @@
                     }
                 });
             }
-            
+
             document.getElementById(tab + '-tab').style.display = 'block';
-            
+
             if (tab === 'channels') loadChannels();
             if (tab === 'jobs') loadJobs();
             if (tab === 'accounts') loadAccounts();
@@ -445,29 +855,29 @@
                 const data = await res.json();
                 displayAccounts(data.accounts);
             } catch (e) {
-                document.getElementById('accounts-list').innerHTML = '<p>Error loading accounts</p>';
+                document.getElementById('accounts-list').innerHTML = '<p style="color: var(--danger); padding: 20px;">Error loading accounts</p>';
             }
         }
 
         function displayAccounts(accounts) {
             if (accounts.length === 0) {
-                document.getElementById('accounts-list').innerHTML = '<p>No accounts logged in. Click "Add Account" to get started.</p>';
+                document.getElementById('accounts-list').innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>No accounts logged in. Click "Add Account" to get started.</p></div>';
                 return;
             }
-            
-            let html = '<table><thead><tr><th>Phone</th><th>Name</th><th>Username</th><th>User ID</th><th>Actions</th></tr></thead><tbody>';
+
+            let html = '<div class="table-wrapper"><table><thead><tr><th>Phone</th><th>Name</th><th>Username</th><th>User ID</th><th>Actions</th></tr></thead><tbody>';
             accounts.forEach(acc => {
                 html += `<tr>
                     <td><code>${acc.phone}</code></td>
-                    <td>${acc.first_name} ${acc.last_name}</td>
-                    <td>@${acc.username || 'N/A'}</td>
-                    <td>${acc.user_id}</td>
+                    <td style="font-weight: 500; color: var(--text-primary);">${acc.first_name} ${acc.last_name}</td>
+                    <td style="color: var(--accent);">@${acc.username || 'N/A'}</td>
+                    <td><code>${acc.user_id}</code></td>
                     <td>
-                        <button class="btn btn-danger" onclick="logoutAccount('${acc.phone}')">Logout</button>
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="logoutAccount('${acc.phone}')">Logout</button>
                     </td>
                 </tr>`;
             });
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             document.getElementById('accounts-list').innerHTML = html;
         }
 
@@ -491,12 +901,12 @@
             const phone = document.getElementById('login-phone').value;
             const apiId = document.getElementById('login-api-id').value;
             const apiHash = document.getElementById('login-api-hash').value;
-            
+
             if (!phone || !apiId || !apiHash) {
                 alert('Please fill in all fields');
                 return;
             }
-            
+
             try {
                 const res = await fetch('/api/accounts/login/send-code', {
                     method: 'POST',
@@ -507,9 +917,9 @@
                         api_hash: apiHash
                     })
                 });
-                
+
                 const data = await res.json();
-                
+
                 if (data.status === 'code_sent') {
                     currentLoginPhone = phone;
                     document.getElementById('login-step-1').style.display = 'none';
@@ -529,12 +939,12 @@
 
         async function verifyLoginCode() {
             const code = document.getElementById('login-code').value;
-            
+
             if (!code) {
                 alert('Please enter the verification code');
                 return;
             }
-            
+
             try {
                 const res = await fetch('/api/accounts/login/verify-code', {
                     method: 'POST',
@@ -544,9 +954,9 @@
                         code: code
                     })
                 });
-                
+
                 const data = await res.json();
-                
+
                 if (data.status === 'success') {
                     alert('Successfully logged in!');
                     hideLoginForm();
@@ -565,12 +975,12 @@
 
         async function verifyPassword() {
             const password = document.getElementById('login-password').value;
-            
+
             if (!password) {
                 alert('Please enter your 2FA password');
                 return;
             }
-            
+
             try {
                 const res = await fetch('/api/accounts/login/verify-password', {
                     method: 'POST',
@@ -580,9 +990,9 @@
                         password: password
                     })
                 });
-                
+
                 const data = await res.json();
-                
+
                 if (data.status === 'success') {
                     alert('Successfully logged in with 2FA!');
                     hideLoginForm();
@@ -606,16 +1016,16 @@
             if (!confirm(`Logout account ${phone}?\n\nThis will:\n- Delete the session file\n- Clear all channels from the list\n- Remove account from active accounts`)) {
                 return;
             }
-            
+
             try {
                 const res = await fetch('/api/accounts/logout', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ phone: phone })
                 });
-                
+
                 const data = await res.json();
-                
+
                 if (data.status === 'success') {
                     alert(data.message);
                     loadAccounts();
@@ -635,7 +1045,7 @@
         // Initial load
         loadStats();
         loadChannels();
-        
+
         // Auto-refresh
         setInterval(() => {
             loadStats();
